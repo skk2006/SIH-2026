@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Monitoring - SENTINEL-AI</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='/livemon.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <nav class="glass-nav">
+            <div class="logo">
+                <i class="fas fa-shield-alt"></i>
+                <span>SENTINEL-AI</span>
+            </div>
+            <ul class="nav-links">
+                <li><a href="/landing">Home</a></li>
+                <li><a href="/live-mon" class="active">Live Monitoring</a></li>
+                <li><a href="/new-crim">Insert Data</a></li>
+                <li><a href="/suspects">Database</a></li>
+                <li><a href="/vehicles">Vehicles</a></li>
+                <li><a href="/analyze-video">Analyze Video</a></li>
+                <li><a href="/contact">Contact</a></li>
+            </ul>
+            <div class="hamburger">
+                <span class="bar"></span>
+                <span class="bar"></span>
+                <span class="bar"></span>
+            </div>
+        </nav>
+    </header>
+
+    <div class="hero-section">
+        <h1>Real-Time <span class="accent">Criminal Detection</span></h1>
+        <p>Advanced AI-powered monitoring for enhanced public safety and security</p>
+    </div>
+    
+    <main>
+        <section class="monitoring-section">
+            <div class="container">
+                <div class="monitoring-info">
+                    <h2>Intelligent <span class="accent">Surveillance System</span></h2>
+                    <p>Our cutting-edge AI technology continuously analyzes video feeds to identify potential security threats and persons of interest in real-time.</p>
+                </div>
+                
+                <div class="camera-container">
+                    <!-- Mode Selector: Single Camera vs CCTV (Dual Camera) -->
+                    <div class="camera-selector" style="margin-bottom: 15px; text-align: center; display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; align-items: center;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <label for="camera-mode" style="color: #00d2ff; font-weight: bold;">Mode:</label>
+                            <select id="camera-mode" style="padding: 8px 12px; border-radius: 5px; background: rgba(0, 0, 0, 0.7); color: #fff; border: 1px solid #00d2ff; cursor: pointer;">
+                                <option value="single">Single Camera</option>
+                                <option value="cctv">CCTV (Dual Camera)</option>
+                            </select>
+                        </div>
+
+                        <div id="single-cam-options" style="display: flex; align-items: center; gap: 8px;">
+                            <label for="camera-source" style="color: #00d2ff; font-weight: bold;">Camera:</label>
+                            <select id="camera-source" style="padding: 8px 12px; border-radius: 5px; background: rgba(0, 0, 0, 0.7); color: #fff; border: 1px solid #00d2ff;">
+                                <option value="0">Laptop Camera (0)</option>
+                                <option value="1">External Webcam (1)</option>
+                                <option value="2">External Webcam (2)</option>
+                            </select>
+                        </div>
+
+                        <div id="dual-cam-options" style="display: none; align-items: center; gap: 8px;">
+                            <label style="color: #00d2ff; font-weight: bold;">Cam A:</label>
+                            <select id="cam-a" style="padding: 8px; border-radius: 5px; background: rgba(0,0,0,0.7); color: #fff; border: 1px solid #00d2ff;">
+                                <option value="0" selected>Laptop (0)</option>
+                                <option value="1">Webcam (1)</option>
+                                <option value="2">Webcam (2)</option>
+                            </select>
+                            <label style="color: #00d2ff; font-weight: bold;">Cam B:</label>
+                            <select id="cam-b" style="padding: 8px; border-radius: 5px; background: rgba(0,0,0,0.7); color: #fff; border: 1px solid #00d2ff;">
+                                <option value="0">Laptop (0)</option>
+                                <option value="1" selected>Webcam (1)</option>
+                                <option value="2">Webcam (2)</option>
+                            </select>
+                        </div>
+
+                        <button id="apply-camera" class="btn" style="padding: 8px 18px; font-size: 0.9rem; background: linear-gradient(135deg, #00d2ff, #0080ff); border: none; color: #fff; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                            <i class="fas fa-video"></i> Apply
+                        </button>
+                    </div>
+
+                    <div class="camera-feed" id="camera-feed">
+                        <img id="videoFeed" src="{{ url_for('video_feed') }}" alt="Live Surveillance Feed">
+                        <div class="timestamp" id="timestamp"></div>
+                        <div class="recording-indicator">
+                            <div class="recording-dot"></div>
+                            <span>REC</span>
+                        </div>
+                    </div>
+                    <div class="status-indicator" id="status-indicator">
+                        <span class="status-dot"></span>
+                        <span class="status-text">Camera Online</span>
+                    </div>
+                    <div id="live-headcount" style="margin-top: 15px; font-size: 1.2rem; font-weight: bold; color: #00d2ff; text-align: center; background: rgba(0, 0, 0, 0.5); padding: 10px; border-radius: 8px; border: 1px solid rgba(0, 210, 255, 0.3);">
+                        <i class="fas fa-users" style="margin-right: 8px;"></i> Unique Head Count: 0
+                    </div>
+                    <div id="mode-badge" style="margin-top: 8px; text-align: center; font-size: 0.85rem; color: #aaa;">
+                        <i class="fas fa-camera"></i> <span id="mode-label">Single Camera Mode</span>
+                    </div>
+                </div>
+                
+                <div class="controls">
+                    <button class="btn btn-start" id="start-camera">
+                        <i class="fas fa-play"></i> Start Camera
+                    </button>
+                    <button class="btn btn-pause" id="pause-camera" disabled>
+                        <i class="fas fa-pause"></i> Pause Camera
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <section class="stats-section">
+            <div class="container">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <i class="fas fa-user-shield"></i>
+                        <h3>Real-Time Detection</h3>
+                        <p>Identifies persons of interest in milliseconds with 99.7% accuracy</p>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-database"></i>
+                        <h3>Comprehensive Database</h3>
+                        <p>Connected to national criminal records for immediate identification</p>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-bell"></i>
+                        <h3>Instant Alerts</h3>
+                        <p>Immediate notifications when a match is found in our system</p>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-chart-line"></i>
+                        <h3>Advanced Analytics</h3>
+                        <p>Behavior pattern recognition to prevent incidents before they occur</p>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-fist-raised"></i>
+                        <h3>Fight Detection</h3>
+                        <p>Deep Multi-Signal fusion to detect physical altercations instantly</p>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-walking"></i>
+                        <h3>Loitering Detection</h3>
+                        <p>Trajectory tracking to identify suspicious prolonged stays</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    
+    <div class="alert-popup" id="alert-popup">
+        <i class="fas fa-exclamation-triangle"></i>
+        <div>
+            <p id="alert-message">Criminal Detected!</p>
+            <div class="alert-timestamp" id="alert-timestamp"></div>
+        </div>
+    </div>
+
+    <audio id="alert-sound">
+        <source src="{{ url_for('static', filename='alert.mp3') }}" type="audio/mp3">
+    </audio>
+
+    <footer>
+        <div class="footer-content">
+            <div class="footer-section">
+                <div class="footer-logo">
+                    <i class="fas fa-shield-alt"></i>
+                    <span>SENTINEL-AI</span>
+                </div>
+                <p>Advancing public safety through innovation</p>
+            </div>
+            <div class="footer-section">
+                <h3>Quick Links</h3>
+                <ul class="footer-links">
+                    <li><a href="/landing">Home</a></li>
+                    <li><a href="/live-mon">Live Monitoring</a></li>
+                    <li><a href="/new-crim">Insert Data</a></li>
+                    <li><a href="/suspects">Database</a></li>
+                    <li><a href="/contact">Contact</a></li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h3>Contact Info</h3>
+                <div class="footer-contact">
+                    <p><i class="fas fa-map-marker-alt"></i> Sri Krishna College of Engineering and Technology <br> Kuniamuthur, Coimbatore</p>
+                    <p><i class="fas fa-phone"></i> 04254-09375</p>
+                    <p><i class="fas fa-envelope"></i> skcet@sentinel-ai.com</p>
+                </div>
+            </div>
+            <div class="footer-section">
+                <h3>Connect With Us</h3>
+                <div class="social-icons">
+                    <a href="https://www.instagram.com/tech_trailblazers05?igsh=Z3Y3d2hjeDAycXg="><i class="fab fa-instagram"></i></a>
+                    <a href="https://github.com/PYEXPO25/T080_TECHTRAILBLAZERS"><i class="fab fa-github"></i></a>
+                </div>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2025 SENTINEL-AI. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+        // Update timestamp for video feed
+        function updateTimestamp() {
+            const now = new Date();
+            document.getElementById("timestamp").textContent = now.toLocaleString('en-US', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            });
+        }
+        setInterval(updateTimestamp, 1000);
+
+        // Alert system - keep original functionality
+        let alertCooldown = false;
+
+        function fetchAlerts() {
+            if (alertCooldown) return; 
+
+            // Suspect Alerts
+            fetch('/get_alerts')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.length > 0 && !alertCooldown) {
+                        let latestAlert = data[data.length - 1];
+                        showAlert(`ALERT! Suspect: ${latestAlert.name} Detected`, latestAlert.time, '#dc3545');
+                    }
+                });
+                
+            // Fight Alerts
+            if (!alertCooldown) {
+                fetch('/get_fight_alerts')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.length > 0 && !alertCooldown) {
+                            let latestAlert = data[data.length - 1];
+                            showAlert(`THREAT: ${latestAlert.type} (${Math.round(latestAlert.confidence*100)}%)`, latestAlert.time, '#ff0000');
+                        }
+                    });
+            }
+            
+            // Loitering Alerts
+            if (!alertCooldown) {
+                fetch('/get_loitering_alerts')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.length > 0 && !alertCooldown) {
+                            let latestAlert = data[data.length - 1];
+                            showAlert(`LOITERING: ${latestAlert.count} person(s) detected`, latestAlert.time, '#ff8c00');
+                        }
+                    });
+            }
+        }
+        
+        function showAlert(message, timestamp, color) {
+            alertCooldown = true;
+            document.getElementById("alert-message").innerText = message;
+            document.getElementById("alert-timestamp").innerText = timestamp;
+            document.getElementById("alert-popup").style.borderLeftColor = color;
+            document.getElementById("alert-popup").classList.add("show");
+
+            let alertSound = document.getElementById("alert-sound");
+            alertSound.play();
+
+            setTimeout(() => {
+                document.getElementById("alert-popup").classList.remove("show");
+                alertCooldown = false; 
+            }, 10000); 
+        }
+
+        setInterval(fetchAlerts, 3000);
+
+        function fetchHeadcount() {
+            fetch('/get_headcount')
+                .then(response => response.json())
+                .then(data => {
+                    const el = document.getElementById("live-headcount");
+                    const mode = document.getElementById("camera-mode").value;
+                    if (mode === 'cctv') {
+                        el.innerHTML = '<i class="fas fa-users" style="margin-right: 8px;"></i> Unique Head Count (Cross-Camera): ' + data.headcount;
+                    } else {
+                        el.innerHTML = '<i class="fas fa-users" style="margin-right: 8px;"></i> Live Head Count: ' + data.headcount;
+                    }
+                })
+                .catch(e => console.error("Error fetching headcount", e));
+        }
+        setInterval(fetchHeadcount, 1000);
+
+        // ── Mode switching logic ──
+        const modeSelect = document.getElementById("camera-mode");
+        const singleOpts = document.getElementById("single-cam-options");
+        const dualOpts = document.getElementById("dual-cam-options");
+        const modeLabel = document.getElementById("mode-label");
+
+        modeSelect.addEventListener("change", function() {
+            if (this.value === "cctv") {
+                singleOpts.style.display = "none";
+                dualOpts.style.display = "flex";
+                modeLabel.textContent = "CCTV Dual Camera Mode (Cross-Camera ReID)";
+            } else {
+                singleOpts.style.display = "flex";
+                dualOpts.style.display = "none";
+                modeLabel.textContent = "Single Camera Mode";
+            }
+        });
+
+        // ── Apply camera button ──
+        document.getElementById("apply-camera").addEventListener("click", function() {
+            const mode = document.getElementById("camera-mode").value;
+            let feedUrl;
+            if (mode === "cctv") {
+                const camA = document.getElementById("cam-a").value;
+                const camB = document.getElementById("cam-b").value;
+                feedUrl = "/video_feed?mode=dual&src=" + camA + "&cam_b=" + camB;
+                modeLabel.textContent = "CCTV Dual Camera Mode (Cross-Camera ReID)";
+            } else {
+                const src = document.getElementById("camera-source").value;
+                feedUrl = "/video_feed?src=" + src;
+                modeLabel.textContent = "Single Camera Mode";
+            }
+            document.getElementById("videoFeed").src = feedUrl;
+            document.getElementById("status-indicator").classList.add("online");
+            document.querySelector(".status-text").textContent = "Camera Online";
+            document.getElementById("start-camera").disabled = true;
+            document.getElementById("pause-camera").disabled = false;
+        });
+
+        // Camera controls functionality
+        document.getElementById("start-camera").addEventListener("click", function() {
+            document.getElementById("status-indicator").classList.add("online");
+            document.querySelector(".status-text").textContent = "Camera Online";
+            document.getElementById("start-camera").disabled = true;
+            document.getElementById("pause-camera").disabled = false;
+        });
+
+        document.getElementById("pause-camera").addEventListener("click", function() {
+            document.getElementById("videoFeed").src = "";
+            document.getElementById("status-indicator").classList.remove("online");
+            document.querySelector(".status-text").textContent = "Camera Offline";
+            document.getElementById("start-camera").disabled = false;
+            document.getElementById("pause-camera").disabled = true;
+        });
+
+        // Mobile menu toggle
+        const hamburger = document.querySelector(".hamburger");
+        const navLinks = document.querySelector(".nav-links");
+
+        hamburger.addEventListener("click", () => {
+            hamburger.classList.toggle("active");
+            navLinks.classList.toggle("active");
+        });
+    </script>
+</body>
+</html>

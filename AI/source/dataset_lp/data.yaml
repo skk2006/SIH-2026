@@ -1,0 +1,6 @@
+names:
+- license_plate
+nc: 1
+path: C:\Users\Kanishk\Pictures\PROJECT-SENTINEL\SENTINEL-AI\AI\source\dataset_lp
+train: images/train
+val: images/train

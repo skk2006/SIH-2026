@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cyber Crime Division - SENTINEL-AI</title>
+    <link href="https://fonts.googleapis.com/css2?family=Italiana&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='login.css') }}">  
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>SENTINEL-AI</h1>
+            <p class="subtitle">Cyber Crime Division - Secure Access</p>
+        </header>
+
+        <main class="login-container">
+            <div id="loginForm" class="login-form">
+                <h2>Secure Access Portal</h2>
+                <form onsubmit="return handleLogin(event)">
+                    <div class="form-group">
+                        <label for="badgeNumber">Cyber Division Badge ID</label>
+                        <input type="text" id="badgeNumber" name="badgeNumber" required 
+                               pattern="KG[0-9]{4}" 
+                               title="Please enter valid Cyber Division badge number (e.g., KG1234)">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="password">Access Code</label>
+                        <input type="password" id="password" name="password" required>
+                    </div>
+
+                    <button type="submit" class="login-btn">
+                        Submit
+                    </button>
+                </form>
+            </div>
+
+            <div id="profileContainer" class="profile-container" style="display: none;"></div>
+        </main>
+    </div>
+
+    <script>
+        const officerDatabase = {
+            "KG7406": { name: "kanishk", rank: "Cyber Security Division", photo: "./images/kanishk.jpg", password: "7406" }
+        };
+
+        function handleLogin(event) {
+            event.preventDefault();
+            const badgeNumber = document.getElementById('badgeNumber').value;
+            const password = document.getElementById('password').value;
+            const officer = officerDatabase[badgeNumber];
+
+            if (officer && officer.password === password) {
+                window.location.href = "/landing";
+            } else {
+                alert("Authentication failed. Please verify your credentials.");
+            }
+}
+
+    </script>
+</body>
+</html>

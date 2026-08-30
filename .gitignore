@@ -1,0 +1,24 @@
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# IDEs
+.idea/
+.vscode/
+
+# Generated project data
+AI/source/detected_faces/
+AI/source/detected_vehicles/
+AI/source/time_data/
+AI/source/uploads/

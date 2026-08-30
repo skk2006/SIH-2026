@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Analysis - SENTINEL-AI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='newcrim.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='analyze.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <nav class="glass-nav">
+            <div class="logo">
+                <i class="fas fa-shield-alt"></i>
+                <span>SENTINEL-AI</span>
+            </div>
+            <ul class="nav-links">
+                <li><a href="landing">Home</a></li>
+                <li><a href="live-mon">Live Monitoring</a></li>
+                <li><a href="new-crim">Insert-video</a></li>
+                <li><a href="suspects">Suspects</a></li>
+                <li><a href="vehicles">Vehicles</a></li>
+                <li><a href="analyze-video" class="active">Analyze Video</a></li>
+                <li><a href="contact">Contact</a></li>
+            </ul>
+            <div class="hamburger">
+                <span class="bar"></span>
+                <span class="bar"></span>
+                <span class="bar"></span>
+            </div>
+        </nav>
+    </header>
+
+    <div class="hero-section">
+        <h1>Video <span class="accent">Analysis</span></h1>
+        <p>Upload surveillance footage to detect registered faces, unknown faces, and vehicle number plates</p>
+    </div>
+
+    <main>
+        <section class="upload-section">
+            <div class="container">
+                <div class="page-title">
+                    <i class="fas fa-film"></i>
+                    <h2>Upload Video for Analysis</h2>
+                </div>
+                <p class="instruction-text">Upload a video file. The AI will scan every frame for faces (known & unknown) and vehicles with number plates.</p>
+                
+                <form id="analyze-form" action="/analyze-video" method="post" enctype="multipart/form-data">
+                    <div class="upload-box">
+                        <label for="video-upload"><i class="fas fa-video"></i> Upload Video</label>
+                        <div class="file-input-wrapper">
+                            <input type="file" name="video" id="video-upload" accept="video/*" required>
+                            <div class="file-upload-btn">
+                                <i class="fas fa-cloud-upload-alt"></i> Choose Video
+                            </div>
+                            <span id="file-name">No file chosen</span>
+                        </div>
+                    </div>
+                    
+                    <div id="file-preview"></div>
+                    
+                    <button type="submit" class="submit-btn" id="analyzeBtn"><i class="fas fa-search"></i> Analyze Video</button>
+                </form>
+                
+                <div class="messages">
+                    {% with messages = get_flashed_messages() %}
+                        {% if messages %}
+                            {% for message in messages %}
+                                <p>{{ message }}</p>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+                </div>
+            </div>
+        </section>
+
+        <!-- Processing indicator -->
+        <div id="processing-indicator" style="display: none;">
+            <div class="container">
+                <div class="processing-card">
+                    <div class="spinner"></div>
+                    <h3>Analyzing Video...</h3>
+                    <p id="processing-status">Processing frames, please wait. This may take a few minutes depending on video length.</p>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="progressBar"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        {% if results %}
+        <section class="results-section">
+            <div class="container">
+                <h2 class="results-title"><i class="fas fa-chart-bar"></i> Analysis Results</h2>
+                
+                <div class="stats-grid">
+                    <div class="stat-card stat-registered">
+                        <i class="fas fa-user-check"></i>
+                        <div class="stat-number">{{ results.registered_faces|length }}</div>
+                        <div class="stat-label">Registered Faces</div>
+                    </div>
+                    <div class="stat-card stat-unknown">
+                        <i class="fas fa-user-secret"></i>
+                        <div class="stat-number">{{ results.unknown_faces|length }}</div>
+                        <div class="stat-label">Unknown Faces</div>
+                    </div>
+                    <div class="stat-card stat-vehicles">
+                        <i class="fas fa-car"></i>
+                        <div class="stat-number">{{ results.vehicles|length }}</div>
+                        <div class="stat-label">Vehicles Detected</div>
+                    </div>
+                    {% if results.max_head_count is defined %}
+                    <div class="stat-card stat-headcount" style="border-left-color: #00d2ff;">
+                        <i class="fas fa-users" style="color: #00d2ff;"></i>
+                        <div class="stat-number">{{ results.max_head_count }}</div>
+                        <div class="stat-label">Max Head Count</div>
+                    </div>
+                    {% endif %}
+                    {% if results.weapons is defined %}
+                    <div class="stat-card stat-weapons" style="border-left-color: #e74c3c;">
+                        <i class="fas fa-crosshairs" style="color: #e74c3c;"></i>
+                        <div class="stat-number">{{ results.weapons|length }}</div>
+                        <div class="stat-label">Weapons Detected</div>
+                    </div>
+                    {% endif %}
+                    {% if results.fight_analysis is defined and results.fight_analysis %}
+                    <div class="stat-card stat-fight" style="border-left-color: #8e44ad;">
+                        <i class="fas fa-fist-raised" style="color: #8e44ad;"></i>
+                        <div class="stat-number" style="font-size: 1.2rem;">{{ results.fight_analysis.overall_threat_level }}</div>
+                        <div class="stat-label">Fight Threat Level</div>
+                    </div>
+                    {% endif %}
+                    {% if results.loitering is defined and results.loitering %}
+                    <div class="stat-card stat-loitering" style="border-left-color: #f39c12;">
+                        <i class="fas fa-walking" style="color: #f39c12;"></i>
+                        <div class="stat-number">{{ results.loitering.total_persons_tracked }}</div>
+                        <div class="stat-label">Loitering Suspects</div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Registered Faces -->
+                {% if results.registered_faces %}
+                <div class="result-category">
+                    <h3><i class="fas fa-user-check"></i> Registered Faces Detected</h3>
+                    <div class="result-grid">
+                        {% for face in results.registered_faces %}
+                        <div class="result-card registered-card">
+                            <div class="result-image">
+                                <img src="data:image/jpeg;base64,{{ face.image_b64 }}" alt="{{ face.name }}">
+                            </div>
+                            <div class="result-info">
+                                <span class="badge badge-danger"><i class="fas fa-exclamation-triangle"></i> REGISTERED</span>
+                                <h4>{{ face.name }}</h4>
+                                <p class="result-time"><i class="fas fa-clock"></i> Frame #{{ face.frame_number }}</p>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Unknown Faces -->
+                {% if results.unknown_faces %}
+                <div class="result-category">
+                    <h3><i class="fas fa-user-secret"></i> Unknown Faces Detected</h3>
+                    <div class="result-grid">
+                        {% for face in results.unknown_faces %}
+                        <div class="result-card unknown-card">
+                            <div class="result-image">
+                                <img src="data:image/jpeg;base64,{{ face.image_b64 }}" alt="Unknown">
+                            </div>
+                            <div class="result-info">
+                                <span class="badge badge-warning"><i class="fas fa-question-circle"></i> UNKNOWN</span>
+                                <h4>Unknown Person</h4>
+                                <p class="result-time"><i class="fas fa-clock"></i> Frame #{{ face.frame_number }}</p>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Vehicles -->
+                {% if results.vehicles %}
+                <div class="result-category">
+                    <h3><i class="fas fa-car"></i> Vehicles & Number Plates Detected</h3>
+                    <div class="result-grid">
+                        {% for vehicle in results.vehicles %}
+                        <div class="result-card vehicle-card">
+                            <div class="result-image">
+                                <img src="data:image/jpeg;base64,{{ vehicle.image_b64 }}" alt="{{ vehicle.plate }}">
+                            </div>
+                            <div class="result-info">
+                                <span class="badge badge-info"><i class="fas fa-id-badge"></i> VEHICLE</span>
+                                <h4 class="plate-text">{{ vehicle.plate }}</h4>
+                                <p class="result-time"><i class="fas fa-clock"></i> Frame #{{ vehicle.frame_number }}</p>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                <!-- Weapons -->
+                {% if results.weapons %}
+                <div class="result-category">
+                    <h3 style="color: #e74c3c;"><i class="fas fa-crosshairs"></i> Weapons Detected</h3>
+                    <div class="result-grid">
+                        {% for weapon in results.weapons %}
+                        <div class="result-card weapon-card" style="border-top: 4px solid #e74c3c;">
+                            <div class="result-image">
+                                <img src="data:image/jpeg;base64,{{ weapon.image_b64 }}" alt="{{ weapon.type }}">
+                            </div>
+                            <div class="result-info">
+                                <span class="badge" style="background: rgba(231, 76, 60, 0.2); color: #e74c3c;"><i class="fas fa-exclamation-triangle"></i> THREAT</span>
+                                <h4>{{ weapon.type }} ({{ weapon.confidence }})</h4>
+                                <p class="result-time"><i class="fas fa-clock"></i> Frame #{{ weapon.frame_number }}</p>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Fight Analysis -->
+                {% if results.fight_analysis is defined and results.fight_analysis %}
+                <div class="result-category">
+                    <h3 style="color: #8e44ad;"><i class="fas fa-fist-raised"></i> Fight & Altercation Analysis</h3>
+                    <div class="result-grid">
+                        <div class="result-card" style="border-top: 4px solid #8e44ad; grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; padding: 2rem;">
+                            <h2 style="color: #8e44ad;">{{ results.fight_analysis.overall_threat_level }}</h2>
+                            <p style="font-size: 1.2rem;">Maximum Confidence: {{ (results.fight_analysis.max_confidence * 100)|round(1) }}%</p>
+                            
+                            {% if results.fight_analysis.threat_spans|length > 0 %}
+                            <div style="width: 100%; margin-top: 1rem; text-align: left;">
+                                <h4>Threat Spans (Timeline):</h4>
+                                <ul style="list-style-type: none; padding-left: 0;">
+                                {% for span in results.fight_analysis.threat_spans %}
+                                    <li style="padding: 10px; background: rgba(142, 68, 173, 0.1); margin-bottom: 5px; border-radius: 5px;">
+                                        <strong>{{ span.threat_level }}</strong> 
+                                        (Conf: {{ (span.max_confidence * 100)|round(1) }}%)
+                                    </li>
+                                {% endfor %}
+                                </ul>
+                            </div>
+                            {% else %}
+                            <p>No critical altercations detected during the video.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Loitering Analysis -->
+                {% if results.loitering is defined and results.loitering %}
+                <div class="result-category">
+                    <h3 style="color: #f39c12;"><i class="fas fa-walking"></i> Loitering Analysis</h3>
+                    <div class="result-grid">
+                        <div class="result-card" style="border-top: 4px solid #f39c12; grid-column: 1 / -1; padding: 2rem;">
+                            <h2 style="color: #f39c12; text-align: center;">{{ results.loitering.total_persons_tracked }} Loitering Suspect(s) Found</h2>
+                            
+                            <div style="margin-top: 2rem; text-align: center;">
+                                <p>A processed video highlighting loitering trajectories has been generated.</p>
+                                <p style="font-size: 0.9rem; color: #888;">Check the <code>uploads/</code> directory for the output video.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </section>
+        {% endif %}
+    </main>
+    
+    <footer>
+        <div class="footer-content">
+            <div class="footer-logo">
+                <i class="fas fa-shield-alt"></i>
+                <span>SENTINEL-AI</span>
+            </div>
+            <div class="footer-links">
+                <h3>Quick Links</h3>
+                <ul>
+                    <li><a href="landing">Home</a></li>
+                    <li><a href="live-mon">Live Monitoring</a></li>
+                    <li><a href="new-crim">Insert Data</a></li>
+                    <li><a href="suspects">Database</a></li>
+                    <li><a href="vehicles">Vehicles</a></li>
+                    <li><a href="analyze-video">Analyze Video</a></li>
+                    <li><a href="contact">Contact</a></li>
+                </ul>
+            </div>
+            <div class="footer-contact">
+                <h3>Contact Us</h3>
+                <p><i class="fas fa-map-marker-alt"></i> SRI KRISHNA COLLEGE OF ENGINEERING AND TECHNOLOGY <br>
+                    KUNIYAMUTHUR , COIMBATORE</p>
+                <p><i class="fas fa-phone"></i> 04254-09375</p>
+                <p><i class="fas fa-envelope"></i> skcet@sentinel-ai.com</p>
+            </div>
+            <div class="footer-social">
+                <h3>Connect With Us</h3>
+                <div class="social-icons">
+                    <a href="https://www.instagram.com/tech_trailblazers05?igsh=Z3Y3d2hjeDAycXg="><i class="fab fa-instagram"></i></a>
+                    <a href="https://github.com/PYEXPO25/T080_TECHTRAILBLAZERS"><i class="fab fa-github"></i></a>
+                </div>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2025 SENTINEL-AI. All Rights Reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+        // Mobile menu toggle
+        document.querySelector('.hamburger').addEventListener('click', function() {
+            document.querySelector('.nav-links').classList.toggle('active');
+            this.classList.toggle('active');
+        });
+
+        // File upload preview
+        document.getElementById("video-upload").addEventListener("change", function(event) {
+            let filePreview = document.getElementById("file-preview");
+            let fileName = document.getElementById("file-name");
+            filePreview.innerHTML = "";
+            
+            if (event.target.files.length === 0) {
+                filePreview.innerHTML = "<p>No video selected.</p>";
+                fileName.textContent = "No file chosen";
+                return;
+            }
+            
+            let file = event.target.files[0];
+            fileName.textContent = file.name;
+            
+            if (file.type.startsWith("video/")) {
+                let videoPreview = document.createElement("video");
+                videoPreview.src = URL.createObjectURL(file);
+                videoPreview.controls = true;
+                videoPreview.classList.add("preview-video");
+                filePreview.appendChild(videoPreview);
+            } else {
+                filePreview.innerHTML = "<p class='error-msg'>Invalid file type. Please upload a video.</p>";
+            }
+        });
+
+        // Form submission - show processing indicator
+        document.getElementById("analyze-form").addEventListener("submit", function(event) {
+            let fileInput = document.getElementById("video-upload");
+            if (fileInput.files.length === 0) {
+                alert("Please select a video file.");
+                event.preventDefault();
+                return;
+            }
+            // Show processing indicator
+            document.getElementById("processing-indicator").style.display = "block";
+            document.getElementById("analyzeBtn").disabled = true;
+            document.getElementById("analyzeBtn").innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+            
+            // Animate progress bar (fake progress for UX)
+            let progress = 0;
+            let progressBar = document.getElementById("progressBar");
+            let interval = setInterval(function() {
+                if (progress < 90) {
+                    progress += Math.random() * 3;
+                    progressBar.style.width = progress + "%";
+                }
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
