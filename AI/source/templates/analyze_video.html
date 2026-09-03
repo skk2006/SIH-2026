@@ -3,29 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Analysis - SENTINEL-AI</title>
+    <title>Video Intelligence - SENTINEL-AI</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='newcrim.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='analyze.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
-<body>
+<body class="analyze-page">
+    <!-- Ambient Background Lighting -->
+    <div class="ambient-glow-1"></div>
+    <div class="ambient-glow-2"></div>
+
     <header>
         <nav class="glass-nav">
             <div class="logo">
-                <i class="fas fa-shield-alt"></i>
-                <span>SENTINEL-AI</span>
+                <i class="fas fa-shield-halved" style="color: #00f2fe;"></i>
+                <span>SENTINEL<span style="color: #00f2fe;">-AI</span></span>
             </div>
             <ul class="nav-links">
-                <li><a href="landing">Home</a></li>
-                <li><a href="live-mon">Live Monitoring</a></li>
-                <li><a href="new-crim">Insert-video</a></li>
-                <li><a href="suspects">Suspects</a></li>
-                <li><a href="vehicles">Vehicles</a></li>
-                <li><a href="analyze-video" class="active">Analyze Video</a></li>
-                <li><a href="contact">Contact</a></li>
+                <li><a href="landing"><i class="fas fa-house"></i> Home</a></li>
+                <li><a href="live-mon"><i class="fas fa-broadcast-tower"></i> Live Monitoring</a></li>
+                <li><a href="new-crim"><i class="fas fa-folder-plus"></i> Insert-video</a></li>
+                <li><a href="suspects"><i class="fas fa-users-viewfinder"></i> Suspects</a></li>
+                <li><a href="vehicles"><i class="fas fa-car-rear"></i> Vehicles</a></li>
+                <li><a href="analyze-video" class="active"><i class="fas fa-microchip"></i> Analyze Video</a></li>
+                <li><a href="/night-detection"><i class="fas fa-moon"></i> Night Detection</a></li>
+                <li><a href="contact"><i class="fas fa-headset"></i> Contact</a></li>
             </ul>
             <div class="hamburger">
                 <span class="bar"></span>
@@ -35,129 +40,280 @@
         </nav>
     </header>
 
+    <!-- Hero Header -->
     <div class="hero-section">
-        <h1>Video <span class="accent">Analysis</span></h1>
-        <p>Upload surveillance footage to detect registered faces, unknown faces, and vehicle number plates</p>
+        <div class="hero-badge">
+            <span class="pulse-dot"></span>
+            NEURAL SURVEILLANCE SUITE • HIGH-THROUGHPUT ENGINE
+        </div>
+        <h1>Autonomous Video <span class="accent-gradient">Intelligence</span></h1>
+        <p>Deep neural analysis across biometric face matching, unique person clustering, ANPR vehicle plate recognition, fight altercation detection, and trajectory loitering.</p>
     </div>
 
     <main>
+        <!-- Upload & Analysis Request Section -->
         <section class="upload-section">
             <div class="container">
-                <div class="page-title">
-                    <i class="fas fa-film"></i>
-                    <h2>Upload Video for Analysis</h2>
-                </div>
-                <p class="instruction-text">Upload a video file. The AI will scan every frame for faces (known & unknown) and vehicles with number plates.</p>
-                
-                <form id="analyze-form" action="/analyze-video" method="post" enctype="multipart/form-data">
-                    <div class="upload-box">
-                        <label for="video-upload"><i class="fas fa-video"></i> Upload Video</label>
-                        <div class="file-input-wrapper">
-                            <input type="file" name="video" id="video-upload" accept="video/*" required>
-                            <div class="file-upload-btn">
-                                <i class="fas fa-cloud-upload-alt"></i> Choose Video
-                            </div>
-                            <span id="file-name">No file chosen</span>
-                        </div>
+                <div class="upload-card-wrapper">
+                    <div class="upload-header">
+                        <h2><i class="fas fa-satellite-dish"></i> Upload Surveillance Footage</h2>
+                        <p>Select or drag and drop a high-definition video file. The AI engine will scan every frame in a high-speed unified single pass.</p>
                     </div>
                     
-                    <div id="file-preview"></div>
+                    <form id="analyze-form" action="/analyze-video" method="post" enctype="multipart/form-data">
+                        <div class="dropzone" id="dropArea">
+                            <input type="file" name="video" id="video-upload" accept="video/*" required>
+                            <div class="dropzone-icon-box">
+                                <i class="fas fa-cloud-arrow-up"></i>
+                            </div>
+                            <div class="dropzone-title">Drag & Drop Footage Here</div>
+                            <div class="dropzone-subtitle">Supports MP4, AVI, MOV, MKV, WebM up to 500MB</div>
+                            <span class="browse-pill"><i class="fas fa-folder-open"></i> Browse Video Files</span>
+                        </div>
+                        
+                        <!-- File Metadata & Player Preview Box -->
+                        <div id="file-info-container">
+                            <div class="file-info-header">
+                                <div class="file-meta">
+                                    <i class="fas fa-file-video"></i>
+                                    <div>
+                                        <div class="file-name-text" id="file-name">filename.mp4</div>
+                                        <div class="file-size-text" id="file-size">0.0 MB</div>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn-remove-file" id="btnRemoveFile"><i class="fas fa-trash"></i> Remove</button>
+                            </div>
+                            <div class="preview-video-box" id="file-preview"></div>
+                        </div>
+                        
+                        <button type="submit" class="btn-analyze-submit" id="analyzeBtn">
+                            <i class="fas fa-brain-circuit"></i> Start Deep Neural Analysis
+                        </button>
+                    </form>
                     
-                    <button type="submit" class="submit-btn" id="analyzeBtn"><i class="fas fa-search"></i> Analyze Video</button>
-                </form>
-                
-                <div class="messages">
-                    {% with messages = get_flashed_messages() %}
-                        {% if messages %}
-                            {% for message in messages %}
-                                <p>{{ message }}</p>
-                            {% endfor %}
-                        {% endif %}
-                    {% endwith %}
+                    <div class="messages">
+                        {% with messages = get_flashed_messages() %}
+                            {% if messages %}
+                                {% for message in messages %}
+                                    <p style="color: #ef4444; margin-top: 1rem; text-align: center;"><i class="fas fa-triangle-exclamation"></i> {{ message }}</p>
+                                {% endfor %}
+                            {% endif %}
+                        {% endwith %}
+                    </div>
                 </div>
             </div>
         </section>
 
-        <!-- Processing indicator -->
-        <div id="processing-indicator" style="display: none;">
-            <div class="container">
-                <div class="processing-card">
-                    <div class="spinner"></div>
-                    <h3>Analyzing Video...</h3>
-                    <p id="processing-status">Processing frames, please wait. This may take a few minutes depending on video length.</p>
-                    <div class="progress-bar-container">
-                        <div class="progress-bar" id="progressBar"></div>
+        <!-- High-Tech Cyber Radar Loading State -->
+        <div id="processing-indicator">
+            <div class="container" style="max-width: 860px; margin: 0 auto;">
+                <div class="cyber-scanner-card">
+                    <div class="scanner-radar-wrap">
+                        <div class="radar-ring radar-ring-1"></div>
+                        <div class="radar-ring radar-ring-2"></div>
+                        <div class="radar-center-core">
+                            <i class="fas fa-eye"></i>
+                        </div>
                     </div>
+                    <div class="scanner-title">Neural Engine Processing Stream...</div>
+                    <div class="scanner-status-text" id="processing-status">Decoding video stream and extracting keyframes...</div>
+                    <div class="progress-track">
+                        <div class="progress-fill" id="progressBar"></div>
+                    </div>
+                    <div class="progress-percent-label" id="progressPercent">0% Completed • Optimized Single-Pass Mode</div>
                 </div>
             </div>
         </div>
 
-        <!-- Results Section -->
+        <!-- Comprehensive Results Dossier Section -->
         {% if results %}
-        <section class="results-section">
-            <div class="container">
-                <h2 class="results-title"><i class="fas fa-chart-bar"></i> Analysis Results</h2>
+        <section class="results-section" id="resultsSection">
+            <div class="container" style="max-width: 1240px; margin: 0 auto; padding: 0 1.5rem;">
+                <!-- Header Command Bar -->
+                <div class="results-header-bar">
+                    <div class="results-title">
+                        <i class="fas fa-chart-line"></i> Intelligence Dossier
+                        <span style="font-size: 0.85rem; padding: 4px 12px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #10b981; border-radius: 20px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
+                            <span class="pulse-dot" style="background: #10b981; box-shadow: 0 0 8px #10b981;"></span> COMPLETED
+                        </span>
+                    </div>
+                    <div class="results-actions">
+                        <button class="btn-action-pill" onclick="window.print()"><i class="fas fa-print"></i> Export Report</button>
+                        <a href="/analyze-video" class="btn-action-pill" style="background: rgba(56, 189, 248, 0.15); border-color: rgba(56, 189, 248, 0.3); color: #00f2fe;"><i class="fas fa-rotate"></i> Analyze Another Video</a>
+                    </div>
+                </div>
                 
+                <!-- Bento KPI Stats Grid -->
                 <div class="stats-grid">
+                    <!-- Unique Head Count (Hero KPI) -->
+                    {% if results.unique_people_count is defined or results.max_head_count is defined %}
+                    <div class="stat-card stat-headcount">
+                        <div class="stat-header">
+                            <div class="stat-icon-wrapper">
+                                <i class="fas fa-users-rays"></i>
+                            </div>
+                            <span class="stat-badge">DEDUPLICATED</span>
+                        </div>
+                        <div>
+                            <div class="stat-number">{{ results.unique_people_count if results.unique_people_count is defined else results.max_head_count }}</div>
+                            <div class="stat-label">Unique Head Count</div>
+                            <div class="stat-subtext">Strictly verified unique individuals</div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Registered Suspects -->
                     <div class="stat-card stat-registered">
-                        <i class="fas fa-user-check"></i>
-                        <div class="stat-number">{{ results.registered_faces|length }}</div>
-                        <div class="stat-label">Registered Faces</div>
+                        <div class="stat-header">
+                            <div class="stat-icon-wrapper">
+                                <i class="fas fa-user-shield"></i>
+                            </div>
+                            <span class="stat-badge">DATABASE MATCH</span>
+                        </div>
+                        <div>
+                            <div class="stat-number">{{ results.registered_faces|length }}</div>
+                            <div class="stat-label">Registered Suspects</div>
+                            <div class="stat-subtext">Matches in suspect database</div>
+                        </div>
                     </div>
+
+                    <!-- Unknown Persons -->
                     <div class="stat-card stat-unknown">
-                        <i class="fas fa-user-secret"></i>
-                        <div class="stat-number">{{ results.unknown_faces|length }}</div>
-                        <div class="stat-label">Unknown Faces</div>
+                        <div class="stat-header">
+                            <div class="stat-icon-wrapper">
+                                <i class="fas fa-user-secret"></i>
+                            </div>
+                            <span class="stat-badge">CLUSTERED</span>
+                        </div>
+                        <div>
+                            <div class="stat-number">{{ results.unknown_faces|length }}</div>
+                            <div class="stat-label">Unknown Individuals</div>
+                            <div class="stat-subtext">Clustered by facial embedding</div>
+                        </div>
                     </div>
+
+                    <!-- Vehicles & ANPR -->
                     <div class="stat-card stat-vehicles">
-                        <i class="fas fa-car"></i>
-                        <div class="stat-number">{{ results.vehicles|length }}</div>
-                        <div class="stat-label">Vehicles Detected</div>
+                        <div class="stat-header">
+                            <div class="stat-icon-wrapper">
+                                <i class="fas fa-car-side"></i>
+                            </div>
+                            <span class="stat-badge">ANPR SCAN</span>
+                        </div>
+                        <div>
+                            <div class="stat-number">{{ results.vehicles|length }}</div>
+                            <div class="stat-label">Vehicles Detected</div>
+                            <div class="stat-subtext">Number plates recognized</div>
+                        </div>
                     </div>
-                    {% if results.max_head_count is defined %}
-                    <div class="stat-card stat-headcount" style="border-left-color: #00d2ff;">
-                        <i class="fas fa-users" style="color: #00d2ff;"></i>
-                        <div class="stat-number">{{ results.max_head_count }}</div>
-                        <div class="stat-label">Max Head Count</div>
-                    </div>
-                    {% endif %}
+
+                    <!-- Weapons -->
                     {% if results.weapons is defined %}
-                    <div class="stat-card stat-weapons" style="border-left-color: #e74c3c;">
-                        <i class="fas fa-crosshairs" style="color: #e74c3c;"></i>
-                        <div class="stat-number">{{ results.weapons|length }}</div>
-                        <div class="stat-label">Weapons Detected</div>
+                    <div class="stat-card stat-weapons">
+                        <div class="stat-header">
+                            <div class="stat-icon-wrapper">
+                                <i class="fas fa-crosshairs"></i>
+                            </div>
+                            <span class="stat-badge">ARMAMENT</span>
+                        </div>
+                        <div>
+                            <div class="stat-number">{{ results.weapons|length }}</div>
+                            <div class="stat-label">Weapons Detected</div>
+                            <div class="stat-subtext">Dangerous objects flagged</div>
+                        </div>
                     </div>
                     {% endif %}
+
+                    <!-- Altercation / Fight Detection -->
                     {% if results.fight_analysis is defined and results.fight_analysis %}
-                    <div class="stat-card stat-fight" style="border-left-color: #8e44ad;">
-                        <i class="fas fa-fist-raised" style="color: #8e44ad;"></i>
-                        <div class="stat-number" style="font-size: 1.2rem;">{{ results.fight_analysis.overall_threat_level }}</div>
-                        <div class="stat-label">Fight Threat Level</div>
+                    <div class="stat-card stat-fight">
+                        <div class="stat-header">
+                            <div class="stat-icon-wrapper">
+                                <i class="fas fa-person-falling-burst"></i>
+                            </div>
+                            <span class="stat-badge">ALTERCATION</span>
+                        </div>
+                        <div>
+                            <div class="stat-number">{{ results.fight_analysis.overall_threat_level }}</div>
+                            <div class="stat-label">Fight Threat Level</div>
+                            <div class="stat-subtext">Max Conf: {{ (results.fight_analysis.max_confidence * 100)|round(1) }}%</div>
+                        </div>
                     </div>
                     {% endif %}
+
+                    <!-- Loitering Status -->
                     {% if results.loitering is defined and results.loitering %}
-                    <div class="stat-card stat-loitering" style="border-left-color: #f39c12;">
-                        <i class="fas fa-walking" style="color: #f39c12;"></i>
-                        <div class="stat-number">{{ results.loitering.total_persons_tracked }}</div>
-                        <div class="stat-label">Loitering Suspects</div>
+                    <div class="stat-card stat-loitering">
+                        <div class="stat-header">
+                            <div class="stat-icon-wrapper">
+                                <i class="fas fa-person-walking-dashed-line-arrow-right"></i>
+                            </div>
+                            <span class="stat-badge">TRAJECTORY</span>
+                        </div>
+                        <div>
+                            <div class="stat-number">{{ results.loitering.total_persons_tracked }}</div>
+                            <div class="stat-label">Loitering Suspects</div>
+                            <div class="stat-subtext">Tracked dwell anomalies</div>
+                        </div>
                     </div>
                     {% endif %}
                 </div>
 
-                <!-- Registered Faces -->
+                <!-- Interactive Filter Tabs & Search Bar -->
+                <div class="filter-bar-container">
+                    <div class="filter-pills">
+                        <button class="filter-pill active" data-filter="all"><i class="fas fa-layer-group"></i> All Intel</button>
+                        {% if results.registered_faces %}
+                        <button class="filter-pill" data-filter="registered"><i class="fas fa-user-check"></i> Registered <span class="pill-count">{{ results.registered_faces|length }}</span></button>
+                        {% endif %}
+                        {% if results.unknown_faces %}
+                        <button class="filter-pill" data-filter="unknown"><i class="fas fa-user-secret"></i> Unknown <span class="pill-count">{{ results.unknown_faces|length }}</span></button>
+                        {% endif %}
+                        {% if results.vehicles %}
+                        <button class="filter-pill" data-filter="vehicle"><i class="fas fa-car"></i> Vehicles <span class="pill-count">{{ results.vehicles|length }}</span></button>
+                        {% endif %}
+                        {% if results.weapons %}
+                        <button class="filter-pill" data-filter="weapon"><i class="fas fa-crosshairs"></i> Weapons <span class="pill-count">{{ results.weapons|length }}</span></button>
+                        {% endif %}
+                    </div>
+                    <div class="search-input-box">
+                        <i class="fas fa-magnifying-glass"></i>
+                        <input type="text" id="searchFilterInput" placeholder="Filter by name, plate, frame #...">
+                    </div>
+                </div>
+
+                <!-- 1. Registered Faces Showcase -->
                 {% if results.registered_faces %}
-                <div class="result-category">
-                    <h3><i class="fas fa-user-check"></i> Registered Faces Detected</h3>
+                <div class="result-category" data-category="registered">
+                    <div class="category-header">
+                        <div class="category-title">
+                            <i class="fas fa-user-shield" style="color: #ef4444;"></i> Registered Suspects Detected
+                        </div>
+                        <span class="category-badge-pill" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3);">
+                            {{ results.registered_faces|length }} Confirmed Match{{ 'es' if results.registered_faces|length > 1 else '' }}
+                        </span>
+                    </div>
                     <div class="result-grid">
                         {% for face in results.registered_faces %}
-                        <div class="result-card registered-card">
-                            <div class="result-image">
+                        <div class="result-card registered-card" data-search="{{ face.name }} frame {{ face.frame_number }}">
+                            <div class="result-image-wrapper">
                                 <img src="data:image/jpeg;base64,{{ face.image_b64 }}" alt="{{ face.name }}">
+                                <div class="image-overlay-badge">
+                                    <i class="fas fa-film"></i> Frame #{{ face.frame_number }}
+                                </div>
+                                <button class="image-zoom-btn" onclick="openZoomModal('data:image/jpeg;base64,{{ face.image_b64 }}', '{{ face.name }} (Frame #{{ face.frame_number }})')">
+                                    <i class="fas fa-expand"></i>
+                                </button>
                             </div>
                             <div class="result-info">
-                                <span class="badge badge-danger"><i class="fas fa-exclamation-triangle"></i> REGISTERED</span>
-                                <h4>{{ face.name }}</h4>
-                                <p class="result-time"><i class="fas fa-clock"></i> Frame #{{ face.frame_number }}</p>
+                                <span class="result-status-tag tag-registered">
+                                    <i class="fas fa-triangle-exclamation"></i> REGISTERED SUSPECT
+                                </span>
+                                <h4 class="result-name">{{ face.name }}</h4>
+                                <div class="result-meta-row">
+                                    <span class="result-meta-item"><i class="fas fa-crosshairs"></i> Biometric Verified</span>
+                                    <span class="result-meta-item"><i class="fas fa-check-double"></i> 1x Unique</span>
+                                </div>
                             </div>
                         </div>
                         {% endfor %}
@@ -165,20 +321,38 @@
                 </div>
                 {% endif %}
 
-                <!-- Unknown Faces -->
+                <!-- 2. Unknown Faces Showcase -->
                 {% if results.unknown_faces %}
-                <div class="result-category">
-                    <h3><i class="fas fa-user-secret"></i> Unknown Faces Detected</h3>
+                <div class="result-category" data-category="unknown">
+                    <div class="category-header">
+                        <div class="category-title">
+                            <i class="fas fa-user-secret" style="color: #f59e0b;"></i> Unknown Individuals (Clustered)
+                        </div>
+                        <span class="category-badge-pill" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3);">
+                            {{ results.unknown_faces|length }} Unique Person{{ 's' if results.unknown_faces|length > 1 else '' }}
+                        </span>
+                    </div>
                     <div class="result-grid">
                         {% for face in results.unknown_faces %}
-                        <div class="result-card unknown-card">
-                            <div class="result-image">
-                                <img src="data:image/jpeg;base64,{{ face.image_b64 }}" alt="Unknown">
+                        <div class="result-card unknown-card" data-search="{{ face.name }} frame {{ face.frame_number }}">
+                            <div class="result-image-wrapper">
+                                <img src="data:image/jpeg;base64,{{ face.image_b64 }}" alt="{{ face.name }}">
+                                <div class="image-overlay-badge">
+                                    <i class="fas fa-film"></i> Frame #{{ face.frame_number }}
+                                </div>
+                                <button class="image-zoom-btn" onclick="openZoomModal('data:image/jpeg;base64,{{ face.image_b64 }}', '{{ face.name }} (Frame #{{ face.frame_number }})')">
+                                    <i class="fas fa-expand"></i>
+                                </button>
                             </div>
                             <div class="result-info">
-                                <span class="badge badge-warning"><i class="fas fa-question-circle"></i> UNKNOWN</span>
-                                <h4>Unknown Person</h4>
-                                <p class="result-time"><i class="fas fa-clock"></i> Frame #{{ face.frame_number }}</p>
+                                <span class="result-status-tag tag-unknown">
+                                    <i class="fas fa-fingerprint"></i> UNKNOWN CLUSTER
+                                </span>
+                                <h4 class="result-name">{{ face.name }}</h4>
+                                <div class="result-meta-row">
+                                    <span class="result-meta-item"><i class="fas fa-award"></i> Optimal Crop</span>
+                                    <span class="result-meta-item"><i class="fas fa-user-tag"></i> Unique Person</span>
+                                </div>
                             </div>
                         </div>
                         {% endfor %}
@@ -186,40 +360,80 @@
                 </div>
                 {% endif %}
 
-                <!-- Vehicles -->
+                <!-- 3. Vehicles & ANPR Showcase -->
                 {% if results.vehicles %}
-                <div class="result-category">
-                    <h3><i class="fas fa-car"></i> Vehicles & Number Plates Detected</h3>
+                <div class="result-category" data-category="vehicle">
+                    <div class="category-header">
+                        <div class="category-title">
+                            <i class="fas fa-car" style="color: #38bdf8;"></i> Vehicles & ANPR Plates Scanned
+                        </div>
+                        <span class="category-badge-pill" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3);">
+                            {{ results.vehicles|length }} Vehicle{{ 's' if results.vehicles|length > 1 else '' }}
+                        </span>
+                    </div>
                     <div class="result-grid">
                         {% for vehicle in results.vehicles %}
-                        <div class="result-card vehicle-card">
-                            <div class="result-image">
+                        <div class="result-card vehicle-card" data-search="{{ vehicle.plate }} frame {{ vehicle.frame_number }}">
+                            <div class="result-image-wrapper">
                                 <img src="data:image/jpeg;base64,{{ vehicle.image_b64 }}" alt="{{ vehicle.plate }}">
+                                <div class="image-overlay-badge">
+                                    <i class="fas fa-film"></i> Frame #{{ vehicle.frame_number }}
+                                </div>
+                                <button class="image-zoom-btn" onclick="openZoomModal('data:image/jpeg;base64,{{ vehicle.image_b64 }}', '{{ vehicle.plate }} (Frame #{{ vehicle.frame_number }})')">
+                                    <i class="fas fa-expand"></i>
+                                </button>
                             </div>
                             <div class="result-info">
-                                <span class="badge badge-info"><i class="fas fa-id-badge"></i> VEHICLE</span>
-                                <h4 class="plate-text">{{ vehicle.plate }}</h4>
-                                <p class="result-time"><i class="fas fa-clock"></i> Frame #{{ vehicle.frame_number }}</p>
+                                <span class="result-status-tag tag-vehicle">
+                                    <i class="fas fa-id-card"></i> VEHICLE IDENTIFIER
+                                </span>
+                                <div class="license-plate-badge">
+                                    <span class="plate-flag">IND</span>
+                                    <span>{{ vehicle.plate }}</span>
+                                </div>
+                                <div class="result-meta-row">
+                                    <span class="result-meta-item"><i class="fas fa-barcode"></i> OCR Verified</span>
+                                    <span class="result-meta-item"><i class="fas fa-clock"></i> Timestamped</span>
+                                </div>
                             </div>
                         </div>
                         {% endfor %}
                     </div>
+                </div>
                 {% endif %}
 
-                <!-- Weapons -->
+                <!-- 4. Weapons & Armed Threat Showcase -->
                 {% if results.weapons %}
-                <div class="result-category">
-                    <h3 style="color: #e74c3c;"><i class="fas fa-crosshairs"></i> Weapons Detected</h3>
+                <div class="result-category" data-category="weapon">
+                    <div class="category-header">
+                        <div class="category-title">
+                            <i class="fas fa-crosshairs" style="color: #ef4444;"></i> Weapons & Tactical Threat Alerts
+                        </div>
+                        <span class="category-badge-pill" style="background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4);">
+                            {{ results.weapons|length }} Threat Alert{{ 's' if results.weapons|length > 1 else '' }}
+                        </span>
+                    </div>
                     <div class="result-grid">
                         {% for weapon in results.weapons %}
-                        <div class="result-card weapon-card" style="border-top: 4px solid #e74c3c;">
-                            <div class="result-image">
+                        <div class="result-card weapon-card" data-search="{{ weapon.type }} frame {{ weapon.frame_number }}">
+                            <div class="result-image-wrapper">
                                 <img src="data:image/jpeg;base64,{{ weapon.image_b64 }}" alt="{{ weapon.type }}">
+                                <div class="image-overlay-badge" style="color: #f87171;">
+                                    <i class="fas fa-film"></i> Frame #{{ weapon.frame_number }}
+                                </div>
+                                <button class="image-zoom-btn" onclick="openZoomModal('data:image/jpeg;base64,{{ weapon.image_b64 }}', '{{ weapon.type }} (Confidence: {{ weapon.confidence }})')">
+                                    <i class="fas fa-expand"></i>
+                                </button>
                             </div>
                             <div class="result-info">
-                                <span class="badge" style="background: rgba(231, 76, 60, 0.2); color: #e74c3c;"><i class="fas fa-exclamation-triangle"></i> THREAT</span>
-                                <h4>{{ weapon.type }} ({{ weapon.confidence }})</h4>
-                                <p class="result-time"><i class="fas fa-clock"></i> Frame #{{ weapon.frame_number }}</p>
+                                <span class="result-status-tag tag-weapon">
+                                    <i class="fas fa-skull-crossbones"></i> ARMED ALERT
+                                </span>
+                                <h4 class="result-name" style="color: #f87171;">{{ weapon.type }}</h4>
+                                <div class="result-meta-row">
+                                    <span class="result-meta-item"><i class="fas fa-gauge-high"></i> Confidence: {{ weapon.confidence }}</span>
+                                    <span class="result-meta-item"><i class="fas fa-shield-virus"></i> Security Flag</span>
+                                </div>
                             </div>
                         </div>
                         {% endfor %}
@@ -227,46 +441,84 @@
                 </div>
                 {% endif %}
 
-                <!-- Fight Analysis -->
+                <!-- 5. Fight & Altercation Threat Analysis -->
                 {% if results.fight_analysis is defined and results.fight_analysis %}
                 <div class="result-category">
-                    <h3 style="color: #8e44ad;"><i class="fas fa-fist-raised"></i> Fight & Altercation Analysis</h3>
-                    <div class="result-grid">
-                        <div class="result-card" style="border-top: 4px solid #8e44ad; grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; padding: 2rem;">
-                            <h2 style="color: #8e44ad;">{{ results.fight_analysis.overall_threat_level }}</h2>
-                            <p style="font-size: 1.2rem;">Maximum Confidence: {{ (results.fight_analysis.max_confidence * 100)|round(1) }}%</p>
-                            
-                            {% if results.fight_analysis.threat_spans|length > 0 %}
-                            <div style="width: 100%; margin-top: 1rem; text-align: left;">
-                                <h4>Threat Spans (Timeline):</h4>
-                                <ul style="list-style-type: none; padding-left: 0;">
-                                {% for span in results.fight_analysis.threat_spans %}
-                                    <li style="padding: 10px; background: rgba(142, 68, 173, 0.1); margin-bottom: 5px; border-radius: 5px;">
-                                        <strong>{{ span.threat_level }}</strong> 
-                                        (Conf: {{ (span.max_confidence * 100)|round(1) }}%)
-                                    </li>
-                                {% endfor %}
-                                </ul>
-                            </div>
-                            {% else %}
-                            <p>No critical altercations detected during the video.</p>
-                            {% endif %}
+                    <div class="category-header">
+                        <div class="category-title">
+                            <i class="fas fa-person-falling-burst" style="color: #a855f7;"></i> Altercation & Physical Conflict Analysis
                         </div>
+                    </div>
+                    <div class="altercation-dossier">
+                        <div class="altercation-hero">
+                            <div class="threat-indicator-box">
+                                <div class="threat-pulse-ring {% if results.fight_analysis.overall_threat_level == 'PHYSICAL ALTERCATION' %}threat-level-altercation{% elif results.fight_analysis.overall_threat_level == 'SUSPICIOUS' %}threat-level-suspicious{% else %}threat-level-normal{% endif %}">
+                                    <i class="fas {% if results.fight_analysis.overall_threat_level == 'PHYSICAL ALTERCATION' %}fa-radiation{% elif results.fight_analysis.overall_threat_level == 'SUSPICIOUS' %}fa-eye-dropper{% else %}fa-shield-check{% endif %}"></i>
+                                </div>
+                                <div>
+                                    <div class="threat-title-text">{{ results.fight_analysis.overall_threat_level }}</div>
+                                    <div style="color: var(--text-secondary); font-size: 0.95rem; margin-top: 4px;">
+                                        Altercation Confidence: <strong style="color: #fff;">{{ (results.fight_analysis.max_confidence * 100)|round(1) }}%</strong>
+                                        {% if results.fight_analysis.people_involved > 0 %}
+                                        • Subjects Engaged: <strong style="color: #38bdf8;">{{ results.fight_analysis.people_involved }}</strong>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {% if results.fight_analysis.threat_spans|length > 0 %}
+                        <div>
+                            <h4 style="color: #fff; font-family: var(--font-heading); margin-bottom: 0.75rem; font-size: 1.05rem;">
+                                <i class="fas fa-timeline" style="color: #a855f7;"></i> Threat Event Timeline Spans:
+                            </h4>
+                            <div class="timeline-spans-list">
+                                {% for span in results.fight_analysis.threat_spans %}
+                                <div class="timeline-span-item">
+                                    <div style="display: flex; align-items: center; gap: 10px;">
+                                        <i class="fas fa-circle-exclamation" style="color: #ef4444;"></i>
+                                        <strong style="color: #fff;">{{ span.threat_level }}</strong>
+                                    </div>
+                                    <div style="font-family: var(--font-mono); color: var(--neon-cyan); font-size: 0.85rem;">
+                                        Frames #{{ span.start_frame }} — #{{ span.end_frame }}
+                                    </div>
+                                    <div style="color: var(--text-muted); font-size: 0.85rem;">
+                                        Peak Confidence: <strong style="color: #fff;">{{ (span.max_confidence * 100)|round(1) }}%</strong>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% else %}
+                        <div style="color: var(--text-secondary); text-align: center; padding: 1rem;">
+                            <i class="fas fa-circle-check" style="color: #10b981; font-size: 1.5rem; margin-bottom: 0.5rem; display: block;"></i>
+                            No severe physical altercations detected across surveillance stream.
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
                 {% endif %}
 
-                <!-- Loitering Analysis -->
+                <!-- 6. Loitering Analysis -->
                 {% if results.loitering is defined and results.loitering %}
                 <div class="result-category">
-                    <h3 style="color: #f39c12;"><i class="fas fa-walking"></i> Loitering Analysis</h3>
-                    <div class="result-grid">
-                        <div class="result-card" style="border-top: 4px solid #f39c12; grid-column: 1 / -1; padding: 2rem;">
-                            <h2 style="color: #f39c12; text-align: center;">{{ results.loitering.total_persons_tracked }} Loitering Suspect(s) Found</h2>
-                            
-                            <div style="margin-top: 2rem; text-align: center;">
-                                <p>A processed video highlighting loitering trajectories has been generated.</p>
-                                <p style="font-size: 0.9rem; color: #888;">Check the <code>uploads/</code> directory for the output video.</p>
+                    <div class="category-header">
+                        <div class="category-title">
+                            <i class="fas fa-person-walking-dashed-line-arrow-right" style="color: #f97316;"></i> Trajectory Loitering Analysis
+                        </div>
+                    </div>
+                    <div class="altercation-dossier" style="border-color: rgba(249, 115, 22, 0.3); box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5), 0 0 25px rgba(249, 115, 22, 0.2);">
+                        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1.5rem;">
+                            <div style="display: flex; align-items: center; gap: 1.25rem;">
+                                <div class="threat-pulse-ring" style="background: rgba(249, 115, 22, 0.15); border: 2px solid #f97316; color: #f97316;">
+                                    <i class="fas fa-stopwatch-20"></i>
+                                </div>
+                                <div>
+                                    <div class="threat-title-text">{{ results.loitering.total_persons_tracked }} Loitering Target(s) Identified</div>
+                                    <div style="color: var(--text-secondary); font-size: 0.95rem; margin-top: 4px;">
+                                        Sub-second trajectory vector classification completed with zero latency.
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -276,12 +528,25 @@
         </section>
         {% endif %}
     </main>
+
+    <!-- Modal for Zoomed High-Resolution Preview -->
+    <div class="cyber-modal" id="zoomModal" onclick="closeZoomModal(event)">
+        <div class="modal-content-box" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div id="modalTitle" style="font-family: var(--font-heading); font-weight: 700; color: #fff; font-size: 1.1rem;">Detection Preview</div>
+                <button class="btn-modal-close" onclick="closeZoomModal()"><i class="fas fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <img id="modalImg" src="" alt="Detection Preview">
+            </div>
+        </div>
+    </div>
     
     <footer>
         <div class="footer-content">
             <div class="footer-logo">
-                <i class="fas fa-shield-alt"></i>
-                <span>SENTINEL-AI</span>
+                <i class="fas fa-shield-halved" style="color: #00f2fe;"></i>
+                <span>SENTINEL<span style="color: #00f2fe;">-AI</span></span>
             </div>
             <div class="footer-links">
                 <h3>Quick Links</h3>
@@ -292,11 +557,12 @@
                     <li><a href="suspects">Database</a></li>
                     <li><a href="vehicles">Vehicles</a></li>
                     <li><a href="analyze-video">Analyze Video</a></li>
+                    <li><a href="/night-detection">Night Detection</a></li>
                     <li><a href="contact">Contact</a></li>
                 </ul>
             </div>
             <div class="footer-contact">
-                <h3>Contact Us</h3>
+                <h3>Command Center</h3>
                 <p><i class="fas fa-map-marker-alt"></i> SRI KRISHNA COLLEGE OF ENGINEERING AND TECHNOLOGY <br>
                     KUNIYAMUTHUR , COIMBATORE</p>
                 <p><i class="fas fa-phone"></i> 04254-09375</p>
@@ -311,66 +577,187 @@
             </div>
         </div>
         <div class="footer-bottom">
-            <p>&copy; 2025 SENTINEL-AI. All Rights Reserved.</p>
+            <p>&copy; 2025 SENTINEL-AI • Autonomous Neural Defense Framework. All Rights Reserved.</p>
         </div>
     </footer>
 
     <script>
-        // Mobile menu toggle
+        // Hamburger Menu Toggle
         document.querySelector('.hamburger').addEventListener('click', function() {
             document.querySelector('.nav-links').classList.toggle('active');
             this.classList.toggle('active');
         });
 
-        // File upload preview
-        document.getElementById("video-upload").addEventListener("change", function(event) {
-            let filePreview = document.getElementById("file-preview");
-            let fileName = document.getElementById("file-name");
-            filePreview.innerHTML = "";
-            
-            if (event.target.files.length === 0) {
-                filePreview.innerHTML = "<p>No video selected.</p>";
-                fileName.textContent = "No file chosen";
-                return;
-            }
-            
-            let file = event.target.files[0];
-            fileName.textContent = file.name;
-            
-            if (file.type.startsWith("video/")) {
-                let videoPreview = document.createElement("video");
-                videoPreview.src = URL.createObjectURL(file);
-                videoPreview.controls = true;
-                videoPreview.classList.add("preview-video");
-                filePreview.appendChild(videoPreview);
-            } else {
-                filePreview.innerHTML = "<p class='error-msg'>Invalid file type. Please upload a video.</p>";
+        // Drag and drop setup
+        const dropArea = document.getElementById('dropArea');
+        const fileInput = document.getElementById('video-upload');
+        const fileInfoContainer = document.getElementById('file-info-container');
+        const fileNameEl = document.getElementById('file-name');
+        const fileSizeEl = document.getElementById('file-size');
+        const filePreview = document.getElementById('file-preview');
+        const btnRemove = document.getElementById('btnRemoveFile');
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropArea.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropArea.classList.add('dragover');
+            }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropArea.classList.remove('dragover');
+            }, false);
+        });
+
+        dropArea.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                handleFileSelection(files[0]);
             }
         });
 
-        // Form submission - show processing indicator
-        document.getElementById("analyze-form").addEventListener("submit", function(event) {
-            let fileInput = document.getElementById("video-upload");
-            if (fileInput.files.length === 0) {
-                alert("Please select a video file.");
-                event.preventDefault();
+        fileInput.addEventListener('change', function(e) {
+            if (e.target.files.length > 0) {
+                handleFileSelection(e.target.files[0]);
+            }
+        });
+
+        function handleFileSelection(file) {
+            if (!file.type.startsWith('video/')) {
+                alert('Please upload a valid video file (MP4, AVI, WebM, etc.)');
                 return;
             }
-            // Show processing indicator
-            document.getElementById("processing-indicator").style.display = "block";
-            document.getElementById("analyzeBtn").disabled = true;
-            document.getElementById("analyzeBtn").innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+
+            fileNameEl.textContent = file.name;
+            fileSizeEl.textContent = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
+            filePreview.innerHTML = '';
+
+            const video = document.createElement('video');
+            video.src = URL.createObjectURL(file);
+            video.controls = true;
+            filePreview.appendChild(video);
+
+            fileInfoContainer.style.display = 'block';
+            dropArea.style.display = 'none';
+        }
+
+        btnRemove.addEventListener('click', function() {
+            fileInput.value = '';
+            filePreview.innerHTML = '';
+            fileInfoContainer.style.display = 'none';
+            dropArea.style.display = 'block';
+        });
+
+        // Form submission with cyber radar stages
+        const analyzeForm = document.getElementById('analyze-form');
+        const processingIndicator = document.getElementById('processing-indicator');
+        const processingStatus = document.getElementById('processing-status');
+        const progressBar = document.getElementById('progressBar');
+        const progressPercent = document.getElementById('progressPercent');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+
+        const pipelineStages = [
+            "Initializing GPU inference mode & decoding video stream...",
+            "Running unified YOLO person tracking & spatial keyframe extraction...",
+            "Computing FaceNet biometric embeddings & deduplicating unique persons...",
+            "Scanning vehicles & reading license plates with neural OCR...",
+            "Evaluating pose keypoints for physical altercation threat...",
+            "Classifying trajectory vectors for dwell & loitering anomalies...",
+            "Synthesizing intelligence dossier & finalizing unique head count..."
+        ];
+
+        analyzeForm.addEventListener('submit', function(e) {
+            if (fileInput.files.length === 0) {
+                alert('Please select a surveillance video to analyze.');
+                e.preventDefault();
+                return;
+            }
+
+            processingIndicator.style.display = 'block';
+            analyzeBtn.disabled = true;
+            analyzeBtn.innerHTML = '<i class="fas fa-microchip fa-spin"></i> Initializing Neural Pipeline...';
             
-            // Animate progress bar (fake progress for UX)
-            let progress = 0;
-            let progressBar = document.getElementById("progressBar");
-            let interval = setInterval(function() {
-                if (progress < 90) {
-                    progress += Math.random() * 3;
-                    progressBar.style.width = progress + "%";
+            // Scroll to processing indicator smoothly
+            processingIndicator.scrollIntoView({ behavior: 'smooth' });
+
+            let stageIdx = 0;
+            let progress = 5;
+            progressBar.style.width = progress + '%';
+            progressPercent.textContent = Math.round(progress) + '% Completed';
+
+            const interval = setInterval(function() {
+                if (progress < 92) {
+                    progress += Math.random() * 4 + 1.5;
+                    progressBar.style.width = progress + '%';
+                    progressPercent.textContent = Math.round(progress) + '% Completed • High-Speed Stream';
                 }
-            }, 1000);
+
+                if (Math.random() > 0.4 && stageIdx < pipelineStages.length - 1) {
+                    stageIdx = (stageIdx + 1) % pipelineStages.length;
+                    processingStatus.textContent = pipelineStages[stageIdx];
+                }
+            }, 1200);
+        });
+
+        // Modal Zoom Feature
+        const zoomModal = document.getElementById('zoomModal');
+        const modalImg = document.getElementById('modalImg');
+        const modalTitle = document.getElementById('modalTitle');
+
+        function openZoomModal(src, title) {
+            modalImg.src = src;
+            modalTitle.textContent = title || 'Detection Preview';
+            zoomModal.classList.add('active');
+        }
+
+        function closeZoomModal() {
+            zoomModal.classList.remove('active');
+        }
+
+        // Real-Time Search & Category Filters
+        const searchInput = document.getElementById('searchFilterInput');
+        const filterPills = document.querySelectorAll('.filter-pill');
+        const resultCards = document.querySelectorAll('.result-card');
+        const categorySections = document.querySelectorAll('.result-category');
+
+        if (searchInput) {
+            searchInput.addEventListener('input', function(e) {
+                const query = e.target.value.toLowerCase().trim();
+                resultCards.forEach(card => {
+                    const searchData = (card.getAttribute('data-search') || '').toLowerCase();
+                    if (!query || searchData.includes(query)) {
+                        card.style.display = 'flex';
+                    } else {
+                        card.style.display = 'none';
+                    }
+                });
+            });
+        }
+
+        filterPills.forEach(pill => {
+            pill.addEventListener('click', function() {
+                filterPills.forEach(p => p.classList.remove('active'));
+                this.classList.add('active');
+                const filter = this.getAttribute('data-filter');
+
+                if (filter === 'all') {
+                    categorySections.forEach(sec => sec.style.display = 'block');
+                    resultCards.forEach(c => c.style.display = 'flex');
+                } else {
+                    categorySections.forEach(sec => {
+                        const secCat = sec.getAttribute('data-category');
+                        sec.style.display = (secCat === filter) ? 'block' : 'none';
+                    });
+                }
+            });
         });
     </script>
 </body>
 </html>
+

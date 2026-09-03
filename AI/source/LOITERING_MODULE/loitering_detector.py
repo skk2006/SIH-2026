@@ -75,6 +75,53 @@ class LoiteringDetector:
         return features
 
 
+    def predict_trajectories(self, trajectories, sample_step=1):
+        """Predict loitering on pre-collected trajectories without re-running video or YOLO."""
+        if not trajectories:
+            return {"loitering_ids": [], "total_persons_tracked": 0}
+
+        # If sampled, interpolate trajectories to full frame rate so features match training
+        processed_trajectories = {}
+        for pid, points in trajectories.items():
+            if len(points) < 2:
+                continue
+            sorted_pts = sorted(points, key=lambda p: p[0])
+            if sample_step > 1:
+                interp_pts = []
+                for idx in range(len(sorted_pts) - 1):
+                    f_start, x_start, y_start = sorted_pts[idx]
+                    f_end, x_end, y_end = sorted_pts[idx + 1]
+                    f_diff = f_end - f_start
+                    if f_diff <= 0:
+                        interp_pts.append((f_start, x_start, y_start))
+                        continue
+                    for f in range(f_start, f_end):
+                        alpha = (f - f_start) / f_diff
+                        interp_pts.append((f, x_start + alpha * (x_end - x_start), y_start + alpha * (y_end - y_start)))
+                interp_pts.append(sorted_pts[-1])
+                processed_trajectories[pid] = interp_pts
+            else:
+                processed_trajectories[pid] = sorted_pts
+
+        feature_rows = self._extract_features(processed_trajectories)
+        loitering_ids = set()
+
+        if feature_rows:
+            try:
+                feature_df = pd.DataFrame(feature_rows)
+                X = feature_df[self.feature_columns]
+                predictions = self.classifier.predict(X)
+                for row, prediction in zip(feature_rows, predictions):
+                    if prediction == 1:
+                        loitering_ids.add(int(row["id"]))
+            except Exception as e:
+                print(f"Loitering trajectory prediction error: {e}")
+
+        return {
+            "loitering_ids": list(loitering_ids),
+            "total_persons_tracked": len(trajectories)
+        }
+
     def analyze(
         self,
         video_path,

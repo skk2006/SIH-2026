@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Night Vision Detection - SENTINEL-AI</title>
+    <meta name="description" content="Dedicated Night Surveillance & Low-Light Video Analytics with Strict Unique Entity Tracking">
+    
+    <!-- Fonts & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom Night Detection CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='night_detection.css') }}">
+</head>
+<body>
+    <!-- Tactical Glass Header -->
+    <header>
+        <nav class="glass-nav">
+            <div class="logo">
+                <i class="fas fa-shield-halved"></i>
+                <span>SENTINEL-AI</span>
+            </div>
+            <ul class="nav-links">
+                <li><a href="/landing">Home</a></li>
+                <li><a href="/live-mon">Live Monitoring</a></li>
+                <li><a href="/new-crim">Insert-video</a></li>
+                <li><a href="/suspects">Database</a></li>
+                <li><a href="/vehicles">Vehicles</a></li>
+                <li><a href="/analyze-video">Analyze Video</a></li>
+                <li><a href="/night-detection" class="active nav-night-badge"><i class="fas fa-moon"></i> Night Detection</a></li>
+                <li><a href="/contact">Contact</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero-section">
+        <div class="hero-badge">
+            <i class="fas fa-satellite-dish"></i> Low-Light Surveillance Module
+        </div>
+        <h1>Tactical <span class="accent">Night Detection</span></h1>
+        <p>Advanced neural surveillance for night footage. Every detected person, vehicle, and object is tracked and displayed as a <strong>unique entity</strong> with no duplicate frames.</p>
+    </section>
+
+    <main class="container">
+        <!-- Flashed Messages -->
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div style="margin-bottom: 1.5rem;">
+                    {% for message in messages %}
+                        <div style="background: rgba(255, 51, 102, 0.15); border: 1px solid #ff3366; color: #ff3366; padding: 12px 20px; border-radius: 8px; margin-bottom: 8px; font-size: 0.95rem;">
+                            <i class="fas fa-circle-exclamation"></i> {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <!-- Video Upload Section -->
+        <section class="night-upload-card">
+            <div class="upload-header">
+                <h2><i class="fas fa-moon"></i> Upload Night Surveillance Footage</h2>
+                <div class="night-mode-pill">
+                    <i class="fas fa-wand-magic-sparkles"></i> Adaptive Low-Light Enhancement
+                </div>
+            </div>
+
+            <form id="nightUploadForm" action="/night-detection" method="POST" enctype="multipart/form-data">
+                <div class="dropzone-container" id="dropzone">
+                    <input type="file" name="video" id="videoInput" accept="video/*" style="display: none;" required>
+                    <div class="dropzone-icon">
+                        <i class="fas fa-cloud-arrow-up"></i>
+                    </div>
+                    <div class="dropzone-text">
+                        <h3>Drop night video here, or click to browse</h3>
+                        <p>Supports MP4, AVI, MOV, MKV surveillance recordings</p>
+                    </div>
+                    <button type="button" class="file-select-btn" id="browseBtn">
+                        <i class="fas fa-folder-open"></i> Select Video File
+                    </button>
+                    <div class="file-chosen-info" id="fileChosenInfo">
+                        <i class="fas fa-file-video"></i>
+                        <span id="selectedFileName">video.mp4</span>
+                    </div>
+                </div>
+
+                <div class="options-bar">
+                    <div class="toggle-container">
+                        <label class="toggle-switch">
+                            <input type="checkbox" name="force_enhancement" id="forceEnhance" value="true" checked>
+                            <span class="slider"></span>
+                        </label>
+                        <span class="toggle-label">
+                            <strong>Night-Vision Booster (CLAHE + Gamma)</strong>: Maximizes detection accuracy in extreme darkness
+                        </span>
+                    </div>
+
+                    <button type="submit" class="btn-analyze-night" id="submitBtn">
+                        <i class="fas fa-magnifying-glass"></i> Analyze Night Video
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <!-- Processing Indicator (Shown on submit) -->
+        <div id="processingCard" style="display: none;">
+            <div class="processing-card">
+                <div class="radar-spinner"></div>
+                <h3 style="font-family: var(--font-heading); color: #fff; margin: 0 0 8px;">Analyzing Night Surveillance Footage...</h3>
+                <p style="color: var(--text-secondary); max-width: 550px; margin: 0 auto; font-size: 0.95rem;">
+                    Enhancing low-light frames, running night neural weights, and tracking unique entities across all timestamps.
+                </p>
+                <div class="progress-track">
+                    <div class="progress-bar-animated"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detection Results Section -->
+        {% if results %}
+        <section class="results-section">
+            <div class="results-header-banner">
+                <h2><i class="fas fa-chart-pie"></i> Surveillance Intelligence Report</h2>
+                <div class="dedup-badge">
+                    <i class="fas fa-fingerprint"></i> Unique Entity Deduplication Active
+                </div>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="stats-grid">
+                <div class="stat-card card-people">
+                    <div class="stat-icon"><i class="fas fa-users"></i></div>
+                    <div class="stat-num">{{ results.stats.total_unique_persons }}</div>
+                    <div class="stat-title">Unique People</div>
+                    <div class="stat-sub">Identified across video</div>
+                </div>
+
+                <div class="stat-card card-vehicles">
+                    <div class="stat-icon"><i class="fas fa-car-side"></i></div>
+                    <div class="stat-num">{{ results.stats.total_unique_vehicles }}</div>
+                    <div class="stat-title">Unique Vehicles</div>
+                    <div class="stat-sub">
+                        {% if results.stats.vehicle_type_counts %}
+                            {% for vtype, cnt in results.stats.vehicle_type_counts.items() %}
+                                {{ cnt }} {{ vtype }}{% if not loop.last %}, {% endif %}
+                            {% endfor %}
+                        {% else %}
+                            Cars, Bikes, Trucks
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="stat-card card-objects">
+                    <div class="stat-icon"><i class="fas fa-cube"></i></div>
+                    <div class="stat-num">{{ results.stats.total_unique_objects }}</div>
+                    <div class="stat-title">Unique Objects</div>
+                    <div class="stat-sub">Identified items</div>
+                </div>
+
+                <div class="stat-card card-night">
+                    <div class="stat-icon"><i class="fas fa-eye"></i></div>
+                    <div class="stat-num">{{ results.stats.low_light_frames_pct }}%</div>
+                    <div class="stat-title">Night Frames Boosted</div>
+                    <div class="stat-sub">Luma: {{ results.stats.avg_original_brightness }} &rarr; {{ results.stats.avg_enhanced_brightness }}</div>
+                </div>
+            </div>
+
+            <!-- Category Filter Tabs -->
+            <div class="tabs-navigation">
+                <button type="button" class="tab-btn active" data-filter="all">
+                    <i class="fas fa-border-all"></i> All Entities
+                    <span class="tab-count">{{ results.unique_persons|length + results.unique_vehicles|length + results.unique_objects|length }}</span>
+                </button>
+                <button type="button" class="tab-btn" data-filter="person">
+                    <i class="fas fa-user"></i> People
+                    <span class="tab-count">{{ results.unique_persons|length }}</span>
+                </button>
+                <button type="button" class="tab-btn" data-filter="vehicle">
+                    <i class="fas fa-car"></i> Vehicles
+                    <span class="tab-count">{{ results.unique_vehicles|length }}</span>
+                </button>
+                <button type="button" class="tab-btn" data-filter="object">
+                    <i class="fas fa-cube"></i> Objects
+                    <span class="tab-count">{{ results.unique_objects|length }}</span>
+                </button>
+            </div>
+
+            <!-- Entities Grid -->
+            <div class="entity-grid" id="entityGrid">
+                <!-- Unique Persons -->
+                {% for person in results.unique_persons %}
+                <div class="entity-card card-person" data-category="person">
+                    <div class="card-img-wrapper">
+                        <img src="data:image/jpeg;base64,{{ person.image_b64 }}" alt="{{ person.title }}" loading="lazy">
+                        <span class="card-tag-badge"><i class="fas fa-user"></i> {{ person.class_name }}</span>
+                        <span class="card-conf-badge">{{ person.confidence_pct }}% Conf</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="card-title-row">
+                            <h4>{{ person.title }}</h4>
+                            <span class="card-id-pill">{{ person.unique_id }}</span>
+                        </div>
+                        <ul class="entity-metadata">
+                            <li><i class="fas fa-clock"></i> Timeline: {{ person.time_range }}</li>
+                            <li><i class="fas fa-stopwatch"></i> Duration: {{ person.duration_sec }}</li>
+                            <li><i class="fas fa-camera"></i> Tracked across {{ person.total_detections }} frames</li>
+                        </ul>
+                        <div class="unique-verified-footer">
+                            <span><i class="fas fa-check-double"></i> Unique Person</span>
+                            <span>Frame #{{ person.first_frame }}</span>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+
+                <!-- Unique Vehicles -->
+                {% for vehicle in results.unique_vehicles %}
+                <div class="entity-card card-vehicle" data-category="vehicle">
+                    <div class="card-img-wrapper">
+                        <img src="data:image/jpeg;base64,{{ vehicle.image_b64 }}" alt="{{ vehicle.title }}" loading="lazy">
+                        <span class="card-tag-badge"><i class="fas fa-car"></i> {{ vehicle.vehicle_type }}</span>
+                        <span class="card-conf-badge">{{ vehicle.confidence_pct }}% Conf</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="card-title-row">
+                            <h4>{{ vehicle.title }}</h4>
+                            <span class="card-id-pill">{{ vehicle.unique_id }}</span>
+                        </div>
+                        <ul class="entity-metadata">
+                            <li><i class="fas fa-clock"></i> Timeline: {{ vehicle.time_range }}</li>
+                            <li><i class="fas fa-stopwatch"></i> Duration: {{ vehicle.duration_sec }}</li>
+                            <li><i class="fas fa-camera"></i> Tracked across {{ vehicle.total_detections }} frames</li>
+                        </ul>
+                        <div class="unique-verified-footer">
+                            <span><i class="fas fa-check-double"></i> Unique Vehicle</span>
+                            <span>Frame #{{ vehicle.first_frame }}</span>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+
+                <!-- Unique Objects -->
+                {% for obj in results.unique_objects %}
+                <div class="entity-card card-object" data-category="object">
+                    <div class="card-img-wrapper">
+                        <img src="data:image/jpeg;base64,{{ obj.image_b64 }}" alt="{{ obj.title }}" loading="lazy">
+                        <span class="card-tag-badge"><i class="fas fa-cube"></i> {{ obj.class_name }}</span>
+                        <span class="card-conf-badge">{{ obj.confidence_pct }}% Conf</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="card-title-row">
+                            <h4>{{ obj.title }}</h4>
+                            <span class="card-id-pill">{{ obj.unique_id }}</span>
+                        </div>
+                        <ul class="entity-metadata">
+                            <li><i class="fas fa-clock"></i> Timeline: {{ obj.time_range }}</li>
+                            <li><i class="fas fa-stopwatch"></i> Duration: {{ obj.duration_sec }}</li>
+                            <li><i class="fas fa-camera"></i> Tracked across {{ obj.total_detections }} frames</li>
+                        </ul>
+                        <div class="unique-verified-footer">
+                            <span><i class="fas fa-check-double"></i> Unique Object</span>
+                            <span>Frame #{{ obj.first_frame }}</span>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            {% if not results.unique_persons and not results.unique_vehicles and not results.unique_objects %}
+            <div class="empty-state">
+                <i class="fas fa-shield-virus"></i>
+                <h3>No Entities Detected</h3>
+                <p>No people, vehicles, or objects were identified with sufficient confidence in this video.</p>
+            </div>
+            {% endif %}
+        </section>
+        {% endif %}
+    </main>
+
+    <!-- Tactical Footer -->
+    <footer>
+        <div class="container">
+            <p><i class="fas fa-shield-alt"></i> SENTINEL-AI &bull; Dedicated Night Surveillance &bull; All Rights Reserved</p>
+        </div>
+    </footer>
+
+    <!-- Interactive Logic -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const dropzone = document.getElementById('dropzone');
+            const fileInput = document.getElementById('videoInput');
+            const browseBtn = document.getElementById('browseBtn');
+            const fileChosenInfo = document.getElementById('fileChosenInfo');
+            const selectedFileName = document.getElementById('selectedFileName');
+            const form = document.getElementById('nightUploadForm');
+            const processingCard = document.getElementById('processingCard');
+            const submitBtn = document.getElementById('submitBtn');
+
+            // Click to upload
+            browseBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                fileInput.click();
+            });
+
+            dropzone.addEventListener('click', () => {
+                fileInput.click();
+            });
+
+            // Drag and drop events
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropzone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropzone.classList.add('dragover');
+                });
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropzone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropzone.classList.remove('dragover');
+                });
+            });
+
+            dropzone.addEventListener('drop', (e) => {
+                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                    fileInput.files = e.dataTransfer.files;
+                    handleFileSelected(fileInput.files[0]);
+                }
+            });
+
+            fileInput.addEventListener('change', () => {
+                if (fileInput.files.length > 0) {
+                    handleFileSelected(fileInput.files[0]);
+                }
+            });
+
+            function handleFileSelected(file) {
+                selectedFileName.textContent = file.name + ' (' + (file.size / (1024 * 1024)).toFixed(1) + ' MB)';
+                fileChosenInfo.style.display = 'inline-flex';
+            }
+
+            // Show processing spinner on submit
+            form.addEventListener('submit', () => {
+                if (fileInput.files.length > 0) {
+                    processingCard.style.display = 'block';
+                    processingCard.scrollIntoView({ behavior: 'smooth' });
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+                }
+            });
+
+            // Tab filtering for results
+            const tabButtons = document.querySelectorAll('.tab-btn');
+            const cards = document.querySelectorAll('.entity-card');
+
+            tabButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    tabButtons.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+
+                    const filter = btn.getAttribute('data-filter');
+
+                    cards.forEach(card => {
+                        const cat = card.getAttribute('data-category');
+                        if (filter === 'all' || cat === filter) {
+                            card.style.display = 'flex';
+                        } else {
+                            card.style.display = 'none';
+                        }
+                    });
+                });
+            });
+        });
+    </script>
+</body>
+</html>

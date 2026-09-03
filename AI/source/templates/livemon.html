@@ -24,6 +24,7 @@
                 <li><a href="/suspects">Database</a></li>
                 <li><a href="/vehicles">Vehicles</a></li>
                 <li><a href="/analyze-video">Analyze Video</a></li>
+                <li><a href="/night-detection"><i class="fas fa-moon"></i> Night Detection</a></li>
                 <li><a href="/contact">Contact</a></li>
             </ul>
             <div class="hamburger">
@@ -157,8 +158,9 @@
     </main>
     
     <div class="alert-popup" id="alert-popup">
-        <i class="fas fa-exclamation-triangle"></i>
-        <div>
+        <div class="alert-popup-icon"><i class="fas fa-exclamation-triangle"></i></div>
+        <img id="alert-image" src="" alt="Alert Image" style="display:none; max-width: 100px; max-height: 80px; border-radius: 5px; margin-right: 10px;">
+        <div class="alert-popup-content">
             <p id="alert-message">Criminal Detected!</p>
             <div class="alert-timestamp" id="alert-timestamp"></div>
         </div>
@@ -247,7 +249,7 @@
                     .then(data => {
                         if (data.length > 0 && !alertCooldown) {
                             let latestAlert = data[data.length - 1];
-                            showAlert(`THREAT: ${latestAlert.type} (${Math.round(latestAlert.confidence*100)}%)`, latestAlert.time, '#ff0000');
+                            showAlert(`THREAT: ${latestAlert.type} (${Math.round(latestAlert.confidence*100)}%)`, latestAlert.time, '#ff0000', latestAlert.image_url);
                         }
                     });
             }
@@ -265,11 +267,21 @@
             }
         }
         
-        function showAlert(message, timestamp, color) {
+        function showAlert(message, timestamp, color, imageUrl=null) {
             alertCooldown = true;
             document.getElementById("alert-message").innerText = message;
             document.getElementById("alert-timestamp").innerText = timestamp;
             document.getElementById("alert-popup").style.borderLeftColor = color;
+            
+            const alertImage = document.getElementById("alert-image");
+            if (imageUrl) {
+                alertImage.src = imageUrl;
+                alertImage.style.display = "block";
+            } else {
+                alertImage.style.display = "none";
+                alertImage.src = "";
+            }
+
             document.getElementById("alert-popup").classList.add("show");
 
             let alertSound = document.getElementById("alert-sound");

@@ -13,6 +13,10 @@ if not hasattr(np, '_core'):
     sys.modules['numpy._core.umath'] = getattr(_core, 'umath', None)
     sys.modules['numpy._core._multiarray_umath'] = getattr(_core, '_multiarray_umath', None)
 
+import werkzeug
+if not hasattr(werkzeug, '__version__'):
+    werkzeug.__version__ = '3.0.0'
+
 import mediapipe as mp
 from keras_facenet import FaceNet
 import pickle
@@ -33,6 +37,7 @@ import sys
 # Add submodules to Python path
 BASE_PATH = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(BASE_PATH, "LOITERING_MODULE"))
+sys.path.append(os.path.join(BASE_PATH, "night_detection"))
 from loitering_detector import LoiteringDetector
 from pipeline import DeepMultimodalThreatPipeline
 
@@ -103,16 +108,26 @@ except Exception as e:
 
 # Initialize models
 embedder = FaceNet()
+
+def compute_face_embeddings(images):
+    """Compute embeddings cleanly without printing Keras progress bars."""
+    if not images:
+        return []
+    s = embedder.metadata.get('image_size', 160)
+    resized = [cv2.resize(img, (s, s)) for img in images]
+    X = np.float32([embedder._normalize(img) for img in resized])
+    return embedder.model.predict(X, verbose=0)
+
 mp_face_detection = mp.solutions.face_detection
 face_detector = mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5)
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using device: {device} for AI models.")
 
-vehicle_model = YOLO("yolov8n.pt")
+vehicle_model = YOLO(os.path.join(BASE_PATH, "yolov8n.pt"))
 vehicle_model.to(device)
 
-weapon_model = YOLO("weapon.pt")
+weapon_model = YOLO(os.path.join(BASE_PATH, "weapon.pt"))
 weapon_model.to(device)
 # Suppress EasyOCR verbosity
 logging.getLogger("easyocr").setLevel(logging.ERROR)
@@ -125,7 +140,7 @@ loitering_detector = LoiteringDetector(
 )
 
 print("Initializing Fight Detection Pipeline...")
-fight_pipeline = DeepMultimodalThreatPipeline(fight_threshold=0.70)
+fight_pipeline = DeepMultimodalThreatPipeline()
 
 current_head_count = 0
 
@@ -144,6 +159,23 @@ if os.path.exists(yunet_model_path):
     )
 else:
     print("YuNet model not found at", yunet_model_path)
+
+
+# --- Dedicated Night Detection Engine (Lazy Loaded) ---
+night_detector_instance = None
+
+def get_night_detector():
+    """Retrieve or lazily initialize the dedicated night surveillance detector."""
+    global night_detector_instance
+    if night_detector_instance is None:
+        try:
+            from night_detection import NightDetector
+            model_file = os.path.join(BASE_PATH, "night_detection", "night_model.pt")
+            night_detector_instance = NightDetector(model_path=model_file)
+            print("Dedicated Night Detection Engine initialized successfully.")
+        except Exception as err:
+            print(f"Failed to initialize NightDetector: {err}")
+    return night_detector_instance
 
 
 # --- Find the best available plate detector model across all training runs ---
@@ -454,17 +486,14 @@ def ocr_plate_image(plate_img_color):
         text, conf = extract_text_from_ocr_results(results)
         if text and len(text) >= 4:
             all_candidates.append((text, conf))
-            
-    # Early exit if we found a high confidence valid plate
-    for text, conf in all_candidates:
-        if conf > 0.8 and is_valid_plate(text):
-            corrected = apply_ocr_corrections(text)
-            formatted = format_plate_text(corrected)
-            # Final cleanup
-            best = formatted
-            while '--' in best: best = best.replace('--', '-')
-            while '..' in best: best = best.replace('..', '.')
-            return best.strip('-.')
+            # Immediate early exit if valid plate found with good confidence
+            if conf > 0.65 and is_valid_plate(text):
+                corrected = apply_ocr_corrections(text)
+                formatted = format_plate_text(corrected)
+                best = formatted
+                while '--' in best: best = best.replace('--', '-')
+                while '..' in best: best = best.replace('..', '.')
+                return best.strip('-.')
     
     # Tier 2: If Tier 1 failed or had low confidence, try more methods
     preprocessed_tier2 = []
@@ -631,14 +660,16 @@ def extract_face(img, detector=None):
     faces = []
 
     if results.detections:
+        h, w, _ = img.shape
         for detection in results.detections:
             bboxC = detection.location_data.relative_bounding_box
-            h, w, _ = img.shape
             x, y, width, height = (int(bboxC.xmin * w), int(bboxC.ymin * h), 
                                    int(bboxC.width * w), int(bboxC.height * h))
-            face = img_rgb[y:y + height, x:x + width]
+            x1, y1 = max(0, x), max(0, y)
+            x2, y2 = min(w, x + width), min(h, y + height)
+            face = img_rgb[y1:y2, x1:x2]
             if face.shape[0] > 0 and face.shape[1] > 0:
-                faces.append((face, (x, y, width, height)))
+                faces.append((face, (x1, y1, x2 - x1, y2 - y1)))
     return faces
 
 def recognize_face(face_embedding):
@@ -852,6 +883,44 @@ def process_vehicles():
 vehicle_thread = threading.Thread(target=process_vehicles, daemon=True)
 vehicle_thread.start()
 
+# ── Global Unknown ID Allocation ──
+global_unknown_counter = 0
+global_unknown_embeddings = []  # List of normalized embeddings for fast matching
+global_unknown_labels = []      # List of corresponding labels
+
+def get_global_unknown_id(face_embedding):
+    global global_unknown_counter, global_unknown_embeddings, global_unknown_labels
+    
+    norm = np.linalg.norm(face_embedding)
+    if norm == 0:
+        return "Unknown"
+    norm_embedding = face_embedding / norm
+    
+    if len(global_unknown_embeddings) > 0:
+        embs_matrix = np.array(global_unknown_embeddings)
+        sims = np.dot(embs_matrix, norm_embedding)
+        best_idx = np.argmax(sims)
+        
+        # 0.65 distance roughly corresponds to 0.35 similarity.
+        # However, testing shows typical cosine similarity for match is >0.7.
+        # We will use 0.65 threshold to match ReID threshold.
+        if sims[best_idx] >= 0.65:
+            return global_unknown_labels[best_idx]
+            
+    # No match found, create new global ID
+    global_unknown_counter += 1
+    new_label = f"Unknown-{global_unknown_counter}"
+    
+    global_unknown_embeddings.append(norm_embedding)
+    global_unknown_labels.append(new_label)
+    
+    # Cap size to prevent memory leaks and keep vectorization fast
+    if len(global_unknown_embeddings) > 1000:
+        global_unknown_embeddings.pop(0)
+        global_unknown_labels.pop(0)
+        
+    return new_label
+
 
 def generate_frames(camera_source=0):
     global alerts, last_detection_time, known_faces, last_vehicle_detection_time, current_head_count
@@ -910,8 +979,15 @@ def generate_frames(camera_source=0):
             face_embedding = embedder.embeddings([face_resized])[0]
             name = recognize_face(face_embedding)
 
-            cv2.rectangle(frame, (x, y), (x + width, y + height), (0, 255, 0), 2)
-            cv2.putText(frame, name, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+            display_name = name
+            if name == "Unknown":
+                display_name = get_global_unknown_id(face_embedding)
+                color = (0, 200, 255)
+            else:
+                color = (0, 255, 0)
+
+            cv2.rectangle(frame, (x, y), (x + width, y + height), color, 2)
+            cv2.putText(frame, display_name, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
 
             current_time = time.time()
 
@@ -997,13 +1073,16 @@ def generate_frames(camera_source=0):
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
             cv2.putText(frame, f"{cls_name.upper()} {conf:.2f}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
 
-        # Fight Detection every 4 frames (matches model stride)
-        if frame_counter % 4 == 0:
-            frame, threat_level, conf = fight_pipeline.process_frame(frame)
-            if threat_level in ["SUSPICIOUS", "PHYSICAL ALTERCATION", "CRITICAL"]:
+        # Fight Detection (run every frame for tracking continuity & accuracy)
+        frame, threat_level, conf = fight_pipeline.process_frame(frame)
+        if threat_level in ["SUSPICIOUS", "PHYSICAL ALTERCATION", "CRITICAL"]:
                 timestamp = datetime.now().strftime("%d-%m-%Y %H-%M-%S")
-                fight_alerts.append({"type": threat_level, "time": timestamp, "confidence": float(conf)})
-                
+                alert_img_path = os.path.join(BASE_PATH, "static", "alerts", "fight_alert.jpg")
+                os.makedirs(os.path.dirname(alert_img_path), exist_ok=True)
+                cv2.imwrite(alert_img_path, frame)
+                # Use timestamp to bypass browser cache
+                image_url = f"/static/alerts/fight_alert.jpg?t={int(time.time())}"
+                fight_alerts.append({"type": threat_level, "time": timestamp, "confidence": float(conf), "image_url": image_url})
         # Loitering Detection (Track every 2 frames)
         if frame_counter % 2 == 0:
             l_results = loitering_detector.yolo.track(frame, persist=True, classes=[0], verbose=False)
@@ -1055,34 +1134,6 @@ def generate_frames(camera_source=0):
     cv2.destroyAllWindows()
 
 
-# ── Cross-camera ReID matching threshold ──
-REID_MATCH_THRESHOLD = 0.65  # cosine distance threshold for same-person match
-
-
-def _match_embedding_to_pool(embedding, pool, threshold=REID_MATCH_THRESHOLD):
-    """Match a face embedding against a pool of {label: embedding}.
-    Returns the label of the best match, or None if no match above threshold."""
-    if not pool:
-        return None
-    norm = np.linalg.norm(embedding)
-    if norm == 0:
-        return None
-    embedding = embedding / norm
-    best_label = None
-    best_sim = -1.0
-    for label, emb in pool.items():
-        n = np.linalg.norm(emb)
-        if n == 0:
-            continue
-        sim = float(np.dot(embedding, emb / n))
-        if sim > best_sim:
-            best_sim = sim
-            best_label = label
-    if best_sim >= (1.0 - threshold):  # convert distance threshold to similarity
-        return best_label
-    return None
-
-
 def generate_dual_frames(cam_a=0, cam_b=1):
     """Dual-camera CCTV mode with cross-camera face ReID for unique person counting.
     
@@ -1112,11 +1163,6 @@ def generate_dual_frames(cam_a=0, cam_b=1):
     frame_counter = 0
     last_weapons_a = []
     last_weapons_b = []
-
-    # Unknown counter for cross-camera ReID
-    unknown_counter = 0
-    # Pool of all unique persons seen: {unique_label: latest_embedding}
-    unique_person_pool = {}
 
     while True:
         ok_a, frame_a = cap_a.read()
@@ -1152,22 +1198,14 @@ def generate_dual_frames(cam_a=0, cam_b=1):
 
                 if name != "Unknown":
                     label = name
-                    # Update pool with recognized person
-                    unique_person_pool[label] = face_embedding.copy()
                 else:
-                    # Try matching to existing pool (cross-camera ReID)
-                    matched = _match_embedding_to_pool(face_embedding, unique_person_pool)
-                    if matched is not None:
-                        label = matched
-                    else:
-                        unknown_counter += 1
-                        label = f"Person-{unknown_counter}"
-                    unique_person_pool[label] = face_embedding.copy()
+                    label = get_global_unknown_id(face_embedding)
 
                 unique_names_this_frame.add(label)
                 color = (0, 255, 0) if name != "Unknown" else (0, 200, 255)
                 cv2.rectangle(frame_a, (x, y), (x + w, y + h), color, 2)
                 cv2.putText(frame_a, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+
 
                 # Alert handling for recognized suspects
                 current_time = time.time()
@@ -1213,20 +1251,14 @@ def generate_dual_frames(cam_a=0, cam_b=1):
 
                 if name != "Unknown":
                     label = name
-                    unique_person_pool[label] = face_embedding.copy()
                 else:
-                    matched = _match_embedding_to_pool(face_embedding, unique_person_pool)
-                    if matched is not None:
-                        label = matched
-                    else:
-                        unknown_counter += 1
-                        label = f"Person-{unknown_counter}"
-                    unique_person_pool[label] = face_embedding.copy()
+                    label = get_global_unknown_id(face_embedding)
 
                 unique_names_this_frame.add(label)
                 color = (0, 255, 0) if name != "Unknown" else (0, 200, 255)
                 cv2.rectangle(frame_b, (x, y), (x + w, y + h), color, 2)
                 cv2.putText(frame_b, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+
 
                 current_time = time.time()
                 if name != "Unknown" and (name not in last_detection_time or current_time - last_detection_time[name] >= 10):
@@ -1262,10 +1294,6 @@ def generate_dual_frames(cam_a=0, cam_b=1):
 
         # ── Unique head count (cross-camera deduplicated) ──
         current_head_count = len(unique_names_this_frame)
-
-        # Expire stale entries from pool (persons not seen for 200 frames ≈ 7 sec)
-        if frame_counter % 200 == 0:
-            unique_person_pool.clear()
 
         # ── Combine frames side by side ──
         if ok_a and ok_b:
@@ -1397,31 +1425,56 @@ def newcrim():
     return render_template('newcrim.html')
 
 def analyze_video_file(video_path):
-    """Analyze a video file for registered faces, unknown faces, and vehicle plates."""
+    """Analyze a video file with a high-speed, unified single-pass pipeline for registered faces,
+    unknown faces, vehicle plates (ANPR), weapons, loitering, and fight detection."""
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         return None
 
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fps = cap.get(cv2.CAP_PROP_FPS)
-    if fps == 0: fps = 25.0
-    
-    # Process every Nth frame to keep analysis fast for faces/vehicles
-    step = max(1, total_frames // 30)  # analyze ~30 frames max
-    
-    all_frames = [] # Collect all frames for fight detection
+    if fps <= 0: fps = 25.0
 
-    registered_faces = []
-    unknown_faces = []
+    # Optimal sampling step: ~12 FPS provides rich temporal detail while minimizing GPU load
+    step = max(1, int(round(fps / 12)))
+
+    registered_candidates = {}   # name -> dict (unique registered persons)
+    unknown_face_tracks = []     # list of tracked unknown faces
+    next_face_track_id = 1
     vehicles = []
     weapons = []
     max_head_count = 0
+    unique_person_ids = set()
 
-    seen_names = set()       # avoid duplicates for registered faces
-    seen_unknown = 0         # cap unknown faces shown
-    seen_plates = set()      # avoid duplicate plates
+    seen_plates = set()          # avoid duplicate plates / vehicle labels
+    seen_weapons = set()         # avoid spamming identical weapon detections
+    vehicle_plate_map = {}       # track_id -> recognized plate string
+    vehicle_ocr_attempts = {}    # track_id -> number of OCR attempts made
+    trajectories = {}            # pid -> [(frame_count, cx, cy)] for loitering
 
-    local_detector = mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5)
+    # Initialize fight detection state
+    fight_pipeline.reset_state()
+    threat_spans = []
+    fight_highest_conf = 0.0
+    fight_threat_level = "NORMAL"
+    fight_people_involved = 0
+
+    local_detector = mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.35)
+
+    def compute_face_quality(crop):
+        """Compute face quality score based on image sharpness and size."""
+        if crop is None or crop.size == 0:
+            return 0.0
+        ch, cw = crop.shape[:2]
+        area = ch * cw
+        if area < 400:
+            return float(area)
+        try:
+            gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY) if len(crop.shape) == 3 else crop
+            variance = cv2.Laplacian(gray, cv2.CV_64F).var()
+            return float(variance * np.sqrt(area))
+        except Exception:
+            return float(area)
 
     # Reload known faces
     current_known = {}
@@ -1437,193 +1490,422 @@ def analyze_video_file(video_path):
                 norms[norms == 0] = 1
                 normalized_current[person] = embs / norms
 
+    # Free any cached VRAM before starting video processing
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
     frame_count = 0
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
+    with torch.inference_mode():
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
 
-        # Collect for fight detection
-        all_frames.append(frame.copy())
-
-        if frame_count % step != 0:
-            frame_count += 1
-            continue
-
-        frame_count += 1
-        
-        # Resize frame to max 720p for faster processing
-        h, w = frame.shape[:2]
-        if max(h, w) > 1280:
-            scale = 1280 / max(h, w)
-            frame = cv2.resize(frame, (int(w * scale), int(h * scale)))
-
-        # --- Head Counting with YuNet ---
-        if face_detector_yunet is not None:
-            yunet_input = cv2.resize(frame, (320, 320))
-            _, faces_yunet = face_detector_yunet.detect(yunet_input)
-            if faces_yunet is not None:
-                count = faces_yunet.shape[0]
-                if count > max_head_count:
-                    max_head_count = count
-
-        # --- Face Detection ---
-        faces = extract_face(frame, detector=local_detector)
-        
-        valid_faces = []
-        face_images = []
-        for face, bbox in faces:
-            if face.shape[0] < 10 or face.shape[1] < 10:
+            if frame_count % step != 0:
+                frame_count += 1
                 continue
-            face_resized = cv2.resize(face, (160, 160))
-            valid_faces.append((face_resized, bbox))
-            face_images.append(face_resized)
-            
-        if face_images:
-            # Batch embedding
-            embeddings_batch = embedder.embeddings(face_images)
-            
-            for i, ((face_resized, _), face_embedding) in enumerate(zip(valid_faces, embeddings_batch)):
-                norm = np.linalg.norm(face_embedding)
-                if norm > 0:
-                    face_embedding = face_embedding / norm
-                
-                min_dist = float('inf')
-                best_name = 'Unknown'
-                
-                for person, norm_embs in normalized_current.items():
-                    if len(norm_embs) == 0:
-                        continue
-                    diffs = norm_embs - face_embedding
-                    dists = np.linalg.norm(diffs, axis=1)
-                    min_idx = np.argmin(dists)
-                    if dists[min_idx] < 0.7 and dists[min_idx] < min_dist:
-                        min_dist = dists[min_idx]
-                        best_name = person
 
-                # Encode face image to base64
-                face_bgr = cv2.cvtColor(face_resized, cv2.COLOR_RGB2BGR)
-                _, buf = cv2.imencode('.jpg', face_bgr)
-                img_b64 = base64.b64encode(buf).decode('utf-8')
+            current_frame_idx = frame_count
+            frame_count += 1
 
-                if best_name != 'Unknown':
-                    if best_name not in seen_names:
-                        seen_names.add(best_name)
-                        registered_faces.append({
-                            'name': best_name,
-                            'image_b64': img_b64,
-                            'frame_number': frame_count
-                        })
-                else:
-                    if seen_unknown < 20:  # cap at 20 unknown faces
-                        seen_unknown += 1
-                        unknown_faces.append({
-                            'name': 'Unknown',
-                            'image_b64': img_b64,
-                            'frame_number': frame_count
-                        })
+            # Resize frame to max 720p (1280px) for high efficiency
+            h, w = frame.shape[:2]
+            if max(h, w) > 1280:
+                scale = 1280 / max(h, w)
+                frame = cv2.resize(frame, (int(w * scale), int(h * scale)))
+                h, w = frame.shape[:2]
 
-        # --- Vehicle Detection ---
-        try:
-            results = vehicle_model(frame, device=device, verbose=False, half=True, conf=0.55)
-            for result in results:
-                for box in result.boxes:
-                    cls = int(box.cls[0])
-                    if cls in [2, 3, 5, 7]:
-                        x1, y1, x2, y2 = map(int, box.xyxy[0])
-                        h, w, _ = frame.shape
+            # --- 1. Unified YOLO Tracking: Person (0) + Vehicles (2, 3, 5, 7) in ONE Pass ---
+            person_boxes = []
+            vehicle_boxes = []
+            try:
+                yolo_res = vehicle_model.track(
+                    frame,
+                    classes=[0, 2, 3, 5, 7],
+                    persist=True,
+                    conf=0.35,
+                    imgsz=640,
+                    device=device,
+                    verbose=False
+                )
+                if yolo_res and yolo_res[0].boxes is not None:
+                    boxes = yolo_res[0].boxes
+                    cls_ids = boxes.cls.cpu().numpy().astype(int)
+                    xyxys = boxes.xyxy.cpu().numpy()
+                    track_ids = boxes.id.cpu().numpy().astype(int) if boxes.id is not None else [None] * len(cls_ids)
+                    confs = boxes.conf.cpu().numpy()
+
+                    for idx, cls_id in enumerate(cls_ids):
+                        x1, y1, x2, y2 = map(int, xyxys[idx])
                         x1, y1 = max(0, x1), max(0, y1)
                         x2, y2 = min(w, x2), min(h, y2)
+                        tid = track_ids[idx]
+                        conf = float(confs[idx])
 
-                        vehicle_crop = frame[y1:y2, x1:x2]
-                        if vehicle_crop.size > 0:
-                            plate_text = extract_plate_text(vehicle_crop)
+                        if cls_id == 0:  # Person
+                            if tid is not None:
+                                unique_person_ids.add(int(tid))
+                                cx, cy = (x1 + x2) / 2.0, (y1 + y2) / 2.0
+                                if tid not in trajectories:
+                                    trajectories[tid] = []
+                                trajectories[tid].append((current_frame_idx, cx, cy))
+                            person_boxes.append((x1, y1, x2, y2, tid, conf))
+                        else:  # Vehicle (2=car, 3=motorcycle, 5=bus, 7=truck)
+                            cls_name = vehicle_model.names.get(cls_id, "vehicle").upper()
+                            vehicle_boxes.append((x1, y1, x2, y2, tid, cls_name, conf))
+            except Exception as e:
+                pass
 
-                            if plate_text == "UNKNOWN":
+            # --- 2. YuNet Fast Head Counting ---
+            faces_yunet = None
+            if face_detector_yunet is not None:
+                try:
+                    yunet_input = cv2.resize(frame, (320, 320))
+                    _, faces_yunet = face_detector_yunet.detect(yunet_input)
+                    if faces_yunet is not None:
+                        count = faces_yunet.shape[0]
+                        if count > max_head_count:
+                            max_head_count = count
+                except Exception:
+                    pass
+
+            # --- 3. Face Detection & Recognition (Detects even brief glimpses, shows each unique face ONCE) ---
+            try:
+                faces = extract_face(frame, detector=local_detector)
+                
+                # Fallback to YuNet detection if MediaPipe had no detections in this frame
+                if not faces and face_detector_yunet is not None and faces_yunet is not None and len(faces_yunet) > 0:
+                    orig_h, orig_w = frame.shape[:2]
+                    for y_box in faces_yunet:
+                        yx = int(y_box[0] * orig_w / 320.0)
+                        yy = int(y_box[1] * orig_h / 320.0)
+                        yw = int(y_box[2] * orig_w / 320.0)
+                        yh = int(y_box[3] * orig_h / 320.0)
+                        yx1, yy1 = max(0, yx), max(0, yy)
+                        yx2, yy2 = min(orig_w, yx + yw), min(orig_h, yy + yh)
+                        if (yx2 - yx1) >= 15 and (yy2 - yy1) >= 15:
+                            y_crop = frame[yy1:yy2, yx1:yx2]
+                            if y_crop.size > 0:
+                                faces.append((cv2.cvtColor(y_crop, cv2.COLOR_BGR2RGB), (yx1, yy1, yx2 - yx1, yy2 - yy1)))
+
+                valid_faces = []
+                face_images = []
+                for face, bbox in faces:
+                    if face.shape[0] < 15 or face.shape[1] < 15:
+                        continue
+                    face_resized = cv2.resize(face, (160, 160))
+                    valid_faces.append((face, face_resized, bbox))
+                    face_images.append(face_resized)
+                    
+                if face_images:
+                    embeddings_batch = compute_face_embeddings(face_images)
+                    
+                    for (orig_face_rgb, face_resized, bbox), face_embedding in zip(valid_faces, embeddings_batch):
+                        norm = np.linalg.norm(face_embedding)
+                        if norm > 0:
+                            face_embedding = face_embedding / norm
+                        
+                        min_dist = float('inf')
+                        best_name = 'Unknown'
+                        
+                        for person, norm_embs in normalized_current.items():
+                            if len(norm_embs) == 0:
                                 continue
+                            diffs = norm_embs - face_embedding
+                            dists = np.linalg.norm(diffs, axis=1)
+                            min_idx = np.argmin(dists)
+                            if dists[min_idx] < 0.70 and dists[min_idx] < min_dist:
+                                min_dist = dists[min_idx]
+                                best_name = person
 
-                            if plate_text not in seen_plates:
-                                seen_plates.add(plate_text)
-                                # Draw bbox on the crop for display
-                                cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
-                                cv2.putText(frame, plate_text, (x1, y1 - 10),
-                                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
-                                # Encode the full frame with bbox as image
-                                vehicle_display = frame[max(0, y1-20):min(h, y2+20), max(0, x1-20):min(w, x2+20)]
-                                if vehicle_display.size > 0:
-                                    _, vbuf = cv2.imencode('.jpg', vehicle_display)
-                                    v_b64 = base64.b64encode(vbuf).decode('utf-8')
-                                    vehicles.append({
-                                        'plate': plate_text,
-                                        'image_b64': v_b64,
-                                        'frame_number': frame_count
-                                    })
-        except Exception as e:
-            print(f"Vehicle detection error in frame {frame_count}: {e}")
+                        # Pick the sharpest, highest-quality crop
+                        face_bgr = cv2.cvtColor(orig_face_rgb, cv2.COLOR_RGB2BGR) if len(orig_face_rgb.shape) == 3 else orig_face_rgb
+                        display_face = face_bgr if (face_bgr.shape[0] >= 60 and face_bgr.shape[1] >= 60) else cv2.cvtColor(face_resized, cv2.COLOR_RGB2BGR)
+                        quality = compute_face_quality(display_face)
 
-        # --- Weapon Detection ---
-        try:
-            w_results = weapon_model(frame, device=device, verbose=False, conf=0.45, iou=0.45, augment=False, half=True)
-            for result in w_results:
-                for box in result.boxes:
-                    conf = float(box.conf[0])
-                    if conf > 0.25:  # lowered threshold to 0.25
-                        x1, y1, x2, y2 = map(int, box.xyxy[0])
-                        cls_name = weapon_model.names[int(box.cls[0])]
+                        if best_name != 'Unknown':
+                            # Registered face: Keep ONLY ONCE, always updating to the best-quality image
+                            if best_name not in registered_candidates:
+                                registered_candidates[best_name] = {
+                                    'name': best_name,
+                                    'face_bgr': display_face,
+                                    'score': quality,
+                                    'frame_number': current_frame_idx
+                                }
+                            elif quality > registered_candidates[best_name]['score']:
+                                registered_candidates[best_name]['face_bgr'] = display_face
+                                registered_candidates[best_name]['score'] = quality
+                                registered_candidates[best_name]['frame_number'] = current_frame_idx
+                        else:
+                            # Unknown face: Track spatially across consecutive frames and by FaceNet embedding
+                            fx, fy, fw, fh = bbox
+                            fcx, fcy = fx + fw / 2.0, fy + fh / 2.0
+                            best_track = None
+                            best_track_dist = float('inf')
+
+                            # 1. Spatial proximity for recent tracks (within 1.5 seconds)
+                            for trk in unknown_face_tracks:
+                                frames_ago = current_frame_idx - trk['last_frame']
+                                if frames_ago <= int(fps * 1.5):
+                                    tx, ty, tw, th = trk['last_bbox']
+                                    tcx, tcy = tx + tw / 2.0, ty + th / 2.0
+                                    s_dist = np.sqrt((fcx - tcx)**2 + (fcy - tcy)**2)
+                                    max_d = max(fw, fh, tw, th)
+                                    if s_dist < max_d * 2.0:
+                                        best_track = trk
+                                        break
+
+                            # 2. If no spatial match, check FaceNet embedding similarity (< 0.75)
+                            if best_track is None:
+                                for trk in unknown_face_tracks:
+                                    c_dist = float(np.linalg.norm(trk['centroid'] - face_embedding))
+                                    if c_dist < 0.75 and c_dist < best_track_dist:
+                                        best_track_dist = c_dist
+                                        best_track = trk
+
+                            if best_track is not None:
+                                best_track['last_bbox'] = bbox
+                                best_track['last_frame'] = current_frame_idx
+                                best_track['embeddings'].append(face_embedding)
+                                mean_emb = np.mean(best_track['embeddings'], axis=0)
+                                best_track['centroid'] = mean_emb / (np.linalg.norm(mean_emb) or 1.0)
+                                if quality > best_track['best_score']:
+                                    best_track['face_bgr'] = display_face
+                                    best_track['best_score'] = quality
+                                    best_track['frame_number'] = current_frame_idx
+                            else:
+                                unknown_face_tracks.append({
+                                    'track_id': next_face_track_id,
+                                    'last_bbox': bbox,
+                                    'last_frame': current_frame_idx,
+                                    'embeddings': [face_embedding],
+                                    'centroid': face_embedding,
+                                    'face_bgr': display_face,
+                                    'best_score': quality,
+                                    'frame_number': current_frame_idx
+                                })
+                                next_face_track_id += 1
+            except Exception as e:
+                pass
+
+            # --- 4. Vehicle & ANPR Detection (Optimized with Plate Tracking & Caching) ---
+            try:
+                direct_plates = []
+                if plate_detector is not None and vehicle_boxes:
+                    p_res = plate_detector(frame, conf=0.25, imgsz=640, device=device, verbose=False)
+                    if p_res and len(p_res[0].boxes) > 0:
+                        for pbox in p_res[0].boxes:
+                            px1, py1, px2, py2 = map(int, pbox.xyxy[0].cpu().numpy())
+                            pconf = float(pbox.conf[0])
+                            direct_plates.append((px1, py1, px2, py2, pconf))
+
+                for (x1, y1, x2, y2, tid, cls_name, vconf) in vehicle_boxes:
+                    v_width = x2 - x1
+                    v_height = y2 - y1
+                    vehicle_crop = frame[y1:y2, x1:x2]
+                    if vehicle_crop.size == 0:
+                        continue
+
+                    # If this vehicle already has a recognized plate, skip OCR
+                    cached_plate = vehicle_plate_map.get(tid) if tid is not None else None
+                    if cached_plate and cached_plate != "UNKNOWN":
+                        continue
+
+                    plate_text = "UNKNOWN"
+                    matched_plate_box = None
+
+                    # 1. Match with any plate detected directly on the frame
+                    for (px1, py1, px2, py2, pconf) in direct_plates:
+                        pcx, pcy = (px1 + px2) / 2.0, (py1 + py2) / 2.0
+                        if x1 <= pcx <= x2 and y1 <= pcy <= y2:
+                            matched_plate_box = (px1, py1, px2, py2)
+                            p_crop = frame[max(0, py1-5):min(h, py2+5), max(0, px1-5):min(w, px2+5)]
+                            if p_crop.size > 0:
+                                plate_text = ocr_plate_image(p_crop)
+                                if plate_text != "UNKNOWN":
+                                    break
+
+                    # 2. If not matched, attempt OCR only on clear, decently-sized vehicle crops (up to 2 tries)
+                    attempts = vehicle_ocr_attempts.get(tid, 0) if tid is not None else 0
+                    if plate_text == "UNKNOWN" and attempts < 2 and v_width >= 90 and v_height >= 60:
+                        if tid is not None:
+                            vehicle_ocr_attempts[tid] = attempts + 1
+                        plate_text = extract_plate_text(vehicle_crop)
+
+                    if tid is not None and plate_text != "UNKNOWN":
+                        vehicle_plate_map[tid] = plate_text
+
+                    display_label = plate_text if plate_text != "UNKNOWN" else f"{cls_name} DETECTED"
+                    vehicle_key = plate_text if plate_text != "UNKNOWN" else (f"{cls_name}_{tid}" if tid is not None else f"{cls_name}_{x1//100}_{y1//100}")
+
+                    if vehicle_key not in seen_plates:
+                        seen_plates.add(vehicle_key)
+                        annotated_frame = frame.copy()
+                        cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
+                        if matched_plate_box:
+                            mpx1, mpy1, mpx2, mpy2 = matched_plate_box
+                            cv2.rectangle(annotated_frame, (mpx1, mpy1), (mpx2, mpy2), (0, 255, 0), 2)
+                        cv2.putText(annotated_frame, display_label, (x1, max(25, y1 - 10)),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
                         
-                        # Draw red bbox on the frame for weapons
-                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
-                        cv2.putText(frame, f"{cls_name.upper()} {conf:.2f}", (x1, y1 - 10),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-                        
-                        h, w, _ = frame.shape
-                        weapon_display = frame[max(0, y1-20):min(h, y2+20), max(0, x1-20):min(w, x2+20)]
-                        if weapon_display.size > 0:
-                            _, wbuf = cv2.imencode('.jpg', weapon_display)
-                            w_b64 = base64.b64encode(wbuf).decode('utf-8')
-                            weapons.append({
-                                'type': cls_name.upper(),
-                                'image_b64': w_b64,
-                                'frame_number': frame_count,
-                                'confidence': f"{conf:.2f}"
+                        v_display = annotated_frame[max(0, y1-15):min(h, y2+15), max(0, x1-15):min(w, x2+15)]
+                        if v_display.size > 0:
+                            _, vbuf = cv2.imencode('.jpg', v_display)
+                            v_b64 = base64.b64encode(vbuf).decode('utf-8')
+                            vehicles.append({
+                                'plate': display_label,
+                                'image_b64': v_b64,
+                                'frame_number': current_frame_idx
                             })
-        except Exception as e:
-            print(f"Weapon detection error in frame {frame_count}: {e}")
+
+                # Standalone plates that weren't inside vehicle bounding boxes
+                for (px1, py1, px2, py2, pconf) in direct_plates:
+                    p_crop = frame[max(0, py1-5):min(h, py2+5), max(0, px1-5):min(w, px2+5)]
+                    if p_crop.size > 0:
+                        p_text = ocr_plate_image(p_crop)
+                        if p_text != "UNKNOWN" and p_text not in seen_plates:
+                            seen_plates.add(p_text)
+                            annotated_plate = frame[max(0, py1-20):min(h, py2+20), max(0, px1-20):min(w, px2+20)]
+                            if annotated_plate.size > 0:
+                                _, vbuf = cv2.imencode('.jpg', annotated_plate)
+                                v_b64 = base64.b64encode(vbuf).decode('utf-8')
+                                vehicles.append({
+                                    'plate': p_text,
+                                    'image_b64': v_b64,
+                                    'frame_number': current_frame_idx
+                                })
+            except Exception as e:
+                pass
+
+            # --- 5. Weapon Detection ---
+            try:
+                w_results = weapon_model(frame, device=device, verbose=False, conf=0.30, iou=0.45, imgsz=640)
+                if w_results and len(w_results[0].boxes) > 0:
+                    for box in w_results[0].boxes:
+                        conf = float(box.conf[0])
+                        x1, y1, x2, y2 = map(int, box.xyxy[0])
+                        cls_name = weapon_model.names.get(int(box.cls[0]), "weapon")
+                        
+                        weapon_key = f"{cls_name}_{current_frame_idx // 15}"
+                        if weapon_key not in seen_weapons:
+                            seen_weapons.add(weapon_key)
+                            
+                            annotated_w = frame.copy()
+                            cv2.rectangle(annotated_w, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                            cv2.putText(annotated_w, f"{cls_name.upper()} {conf:.2f}", (x1, max(25, y1 - 10)),
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                            
+                            weapon_display = annotated_w[max(0, y1-20):min(h, y2+20), max(0, x1-20):min(w, x2+20)]
+                            if weapon_display.size > 0:
+                                _, wbuf = cv2.imencode('.jpg', weapon_display)
+                                w_b64 = base64.b64encode(wbuf).decode('utf-8')
+                                weapons.append({
+                                    'type': cls_name.upper(),
+                                    'image_b64': w_b64,
+                                    'frame_number': current_frame_idx,
+                                    'confidence': f"{conf:.2f}"
+                                })
+            except Exception as e:
+                pass
+
+            # --- 6. Fight Detection (Streamed on-the-fly, conditioned on multi-person presence) ---
+            try:
+                t_level, t_conf, t_people = fight_pipeline.process_stream_frame(
+                    frame, people_count=len(person_boxes), imgsz=640
+                )
+                if t_level == "PHYSICAL ALTERCATION":
+                    if t_conf > fight_highest_conf:
+                        fight_highest_conf = t_conf
+                        fight_threat_level = "PHYSICAL ALTERCATION"
+                    fight_people_involved = max(fight_people_involved, t_people)
+
+                    if not threat_spans or threat_spans[-1]["end_frame"] < current_frame_idx - 15:
+                        threat_spans.append({
+                            "max_confidence": float(t_conf),
+                            "threat_level": "PHYSICAL ALTERCATION",
+                            "start_frame": max(0, current_frame_idx - 30),
+                            "end_frame": current_frame_idx
+                        })
+                    else:
+                        threat_spans[-1]["end_frame"] = current_frame_idx
+                        threat_spans[-1]["max_confidence"] = max(threat_spans[-1]["max_confidence"], float(t_conf))
+                elif t_level == "SUSPICIOUS" and fight_threat_level != "PHYSICAL ALTERCATION":
+                    if t_conf > fight_highest_conf:
+                        fight_highest_conf = t_conf
+                        fight_threat_level = "SUSPICIOUS"
+            except Exception as e:
+                pass
 
     cap.release()
     local_detector.close()
 
-    # --- Fight Detection ---
-    fight_analysis = None
-    try:
-        if len(all_frames) >= 16:
-            fight_res = fight_pipeline.analyze_full_video_deep(all_frames, fps)
-            # Summarize threat spans
-            highest_conf = 0
-            overall_threat = "NORMAL"
-            for span in fight_res.get("threat_spans", []):
-                if span["max_confidence"] > highest_conf:
-                    highest_conf = span["max_confidence"]
-                    overall_threat = span["threat_level"]
-            fight_analysis = {
-                "overall_threat_level": overall_threat,
-                "max_confidence": float(highest_conf),
-                "threat_spans": fight_res.get("threat_spans", [])
-            }
-    except Exception as e:
-        print(f"Fight analysis error: {e}")
+    # Package registered faces (each unique registered suspect appears EXACTLY ONCE with best crop)
+    registered_faces = []
+    for candidate in registered_candidates.values():
+        _, buf = cv2.imencode('.jpg', candidate['face_bgr'])
+        img_b64 = base64.b64encode(buf).decode('utf-8')
+        registered_faces.append({
+            'name': candidate['name'],
+            'image_b64': img_b64,
+            'frame_number': candidate['frame_number']
+        })
 
-    # --- Loitering Detection ---
+    # Merge any unknown face tracks that have close embeddings (< 0.76)
+    merged_unknown_tracks = []
+    for trk in unknown_face_tracks:
+        matched_m = None
+        for m in merged_unknown_tracks:
+            if float(np.linalg.norm(m['centroid'] - trk['centroid'])) < 0.76:
+                matched_m = m
+                break
+        if matched_m is not None:
+            if trk['best_score'] > matched_m['best_score']:
+                matched_m['face_bgr'] = trk['face_bgr']
+                matched_m['best_score'] = trk['best_score']
+                matched_m['frame_number'] = trk['frame_number']
+            matched_m['embeddings'].extend(trk['embeddings'])
+            mean_e = np.mean(matched_m['embeddings'], axis=0)
+            matched_m['centroid'] = mean_e / (np.linalg.norm(mean_e) or 1.0)
+        else:
+            merged_unknown_tracks.append(trk)
+
+    # Package unknown faces (each unique unknown individual appears EXACTLY ONCE with best crop)
+    unknown_faces = []
+    for idx, trk in enumerate(merged_unknown_tracks):
+        _, buf = cv2.imencode('.jpg', trk['face_bgr'])
+        img_b64 = base64.b64encode(buf).decode('utf-8')
+        label = f"Unknown Person #{idx + 1}" if len(merged_unknown_tracks) > 1 else "Unknown Person"
+        unknown_faces.append({
+            'name': label,
+            'image_b64': img_b64,
+            'frame_number': trk['frame_number']
+        })
+
+    # --- Compute Unique People / Head Count strictly based on unique faces ---
+    total_unique_faces = len(registered_faces) + len(unknown_faces)
+    if total_unique_faces > 0:
+        unique_people_count = total_unique_faces
+    else:
+        unique_people_count = max(len(unique_person_ids), max_head_count)
+
+    # --- Fight Analysis Packaging ---
+    fight_analysis = {
+        "overall_threat_level": fight_threat_level,
+        "max_confidence": float(fight_highest_conf),
+        "threat_spans": threat_spans,
+        "people_involved": fight_people_involved
+    }
+
+    # --- Loitering Analysis (Instant Trajectory Classification, zero video re-read) ---
     loitering_res = None
     try:
-        loit_out = os.path.join(UPLOAD_FOLDER, f"loitering_{os.path.basename(video_path)}")
-        loit_res = loitering_detector.analyze(video_path, loit_out)
-        loitering_res = {
-            "loitering_ids": loit_res["loitering_ids"],
-            "total_persons_tracked": len(loitering_res["loitering_ids"]) if "loitering_ids" in loitering_res else 0 # Rough estimate
-        }
+        loitering_res = loitering_detector.predict_trajectories(trajectories, sample_step=step)
     except Exception as e:
-        print(f"Loitering analysis error: {e}")
+        print(f"Loitering trajectory prediction error: {e}")
+
+    # Clean up GPU memory
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
     return {
         'registered_faces': registered_faces,
@@ -1632,7 +1914,8 @@ def analyze_video_file(video_path):
         'weapons': weapons,
         'fight_analysis': fight_analysis,
         'loitering': loitering_res,
-        'max_head_count': max_head_count
+        'max_head_count': unique_people_count,
+        'unique_people_count': unique_people_count
     }
 
 
@@ -1661,6 +1944,41 @@ def analyze_video():
             return redirect(url_for('analyze_video'))
 
     return render_template('analyze_video.html', results=None)
+
+
+@app.route('/night-detection', methods=['GET', 'POST'])
+def night_detection():
+    if request.method == 'POST':
+        file = request.files.get('video')
+        if file and file.filename:
+            filename = 'night_' + str(int(time.time())) + '_' + file.filename
+            filepath = os.path.join(UPLOAD_FOLDER, filename)
+            file.save(filepath)
+
+            force_enhancement = request.form.get('force_enhancement') == 'true'
+            detector = get_night_detector()
+            if detector is None:
+                flash('Error: Night Detection neural model could not be initialized.')
+                return redirect(url_for('night_detection'))
+
+            results = detector.analyze_video(filepath, force_enhancement=force_enhancement)
+
+            # Clean up uploaded video file
+            try:
+                os.remove(filepath)
+            except Exception:
+                pass
+
+            if results is None:
+                flash('Error: Could not open or process the uploaded video file.')
+                return redirect(url_for('night_detection'))
+
+            return render_template('night_detection.html', results=results)
+        else:
+            flash('Please select a night surveillance video file.')
+            return redirect(url_for('night_detection'))
+
+    return render_template('night_detection.html', results=None)
 
 
 if __name__ == "__main__":
