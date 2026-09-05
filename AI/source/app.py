@@ -2163,6 +2163,28 @@ def get_detection_events():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# ── RAG Retrieval API ────────────────────────────────────────────────────────
+@app.route('/retrieve')
+def retrieve_page():
+    return render_template('retrieve.html')
+
+@app.route('/api/retrieve/query', methods=['POST'])
+def retrieve_query():
+    data = request.json or {}
+    question = data.get("question", "")
+    if not question:
+        return jsonify({"success": False, "answer": "No question provided"})
+    
+    try:
+        from rag.rag_service import process_query
+        result = process_query(question)
+        return jsonify(result)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "answer": "Internal Server Error"})
+
+# ─────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     app.run(debug=True)

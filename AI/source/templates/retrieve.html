@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retrieve - SENTINEL-AI</title>
+    <!-- External CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&family=Poppins:wght@300;400;500;600&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='suspects.css') }}">
+
+    <style>
+        .retrieve-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: var(--card-shadow);
+        }
+
+        .qa-box {
+            margin-top: 2rem;
+        }
+
+        .answer-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid var(--primary-color);
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            border-radius: 4px;
+            white-space: pre-wrap;
+        }
+
+        .evidence-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            padding: 1.5rem;
+            background: white;
+        }
+
+        .evidence-header {
+            font-weight: 600;
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+            color: var(--primary-color);
+        }
+
+        .evidence-images {
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .evidence-image-box {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .evidence-image-box img {
+            width: 100%;
+            height: auto;
+            max-height: 250px;
+            object-fit: contain;
+            border-radius: 4px;
+            border: 1px solid #eee;
+        }
+
+        .evidence-meta {
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            color: #555;
+        }
+
+        .evidence-meta p {
+            margin-bottom: 0.2rem;
+        }
+
+        .loading-spinner {
+            display: none;
+            text-align: center;
+            margin: 2rem 0;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <nav class="glass-nav">
+            <div class="logo">
+                <i class="fas fa-shield-alt"></i>
+                SENTINEL-AI
+            </div>
+            <ul class="nav-links">
+                <li><a href="landing">Home</a></li>
+                <li><a href="live-mon">Live Monitoring</a></li>
+                <li><a href="new-crim">Insert-video</a></li>
+                <li><a href="Database">Suspects</a></li>
+                <li><a href="/retrieve" class="active">Retrieve</a></li>
+                <li><a href="vehicles">Vehicles</a></li>
+                <li><a href="analyze-video">Analyze Video</a></li>
+                <li><a href="/night-detection"><i class="fas fa-moon"></i> Night Detection</a></li>
+                <li><a href="contact">Contact</a></li>
+            </ul>
+            <div class="hamburger">
+                <span class="bar"></span>
+                <span class="bar"></span>
+                <span class="bar"></span>
+            </div>
+        </nav>
+    </header>
+
+    <main>
+        <div class="container fade-in">
+            <h1 class="page-title">SURVEILLANCE RETRIEVAL</h1>
+
+            <div class="retrieve-container">
+                <p class="text-center mb-4">Query redlist and stored detection history using natural language.</p>
+
+                <form id="queryForm">
+                    <div class="input-group mb-3">
+                        <input type="text" id="questionInput" class="form-control form-control-lg"
+                            placeholder="Ask a surveillance question..." autocomplete="off">
+                        <button class="btn btn-primary btn-lg" type="submit" id="retrieveBtn">
+                            <i class="fas fa-search"></i> Retrieve
+                        </button>
+                    </div>
+                </form>
+
+                <div class="loading-spinner" id="loadingDiv">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Retrieving intelligence...</p>
+                </div>
+
+                <div class="qa-box" id="resultContainer" style="display: none;">
+                    <h5>Answer</h5>
+                    <div class="answer-box" id="answerText"></div>
+
+                    <h5 id="evidenceTitle" style="display: none;">Retrieved Evidence</h5>
+                    <div id="evidenceList"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-bottom">
+            <p>&copy; 2026 SENTINEL-AI. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            // Mobile menu
+            $('.hamburger').click(function () {
+                $(this).toggleClass('active');
+                $('.nav-links').toggleClass('active');
+            });
+
+            $('#queryForm').submit(function (e) {
+                e.preventDefault();
+                const question = $('#questionInput').val().trim();
+                if (!question) return;
+
+                $('#resultContainer').hide();
+                $('#loadingDiv').show();
+                $('#evidenceList').empty();
+                $('#evidenceTitle').hide();
+                $('#retrieveBtn').prop('disabled', true);
+
+                $.ajax({
+                    url: '/api/retrieve/query',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ question: question }),
+                    success: function (res) {
+                        $('#loadingDiv').hide();
+                        $('#retrieveBtn').prop('disabled', false);
+
+                        if (res.success) {
+                            $('#answerText').text(res.answer);
+
+                            if (res.results && res.results.length > 0) {
+                                $('#evidenceTitle').show();
+
+                                res.results.forEach(function (item) {
+                                    let html = '<div class="evidence-card">';
+
+                                    html += '<div class="evidence-header">' + (item.person_name || 'Watchlist Record') + '</div>';
+
+                                    html += '<div class="evidence-images">';
+
+                                    if (item.reference_image_url) {
+                                        html += '<div class="evidence-image-box">';
+                                        html += '<h6>Watchlist Reference</h6>';
+                                        html += '<img src="' + item.reference_image_url + '" alt="Reference">';
+                                        html += '</div>';
+                                    }
+
+                                    if (item.evidence_image_url) {
+                                        html += '<div class="evidence-image-box">';
+                                        html += '<h6>Detection Evidence</h6>';
+                                        html += '<img src="' + item.evidence_image_url + '" alt="Evidence">';
+                                        html += '</div>';
+                                    }
+
+                                    html += '</div>'; // evidence-images
+
+                                    html += '<div class="evidence-meta mt-3">';
+                                    if (item.source) html += '<p><strong>Source:</strong> ' + item.source + '</p>';
+                                    if (item.detected_at) {
+                                        let d = new Date(item.detected_at);
+                                        html += '<p><strong>Detected:</strong> ' + d.toLocaleString() + '</p>';
+                                    } else if (item.created_at) {
+                                        let d = new Date(item.created_at);
+                                        html += '<p><strong>Enrolled:</strong> ' + d.toLocaleString() + '</p>';
+                                    }
+
+                                    if (item.confidence) html += '<p><strong>Confidence:</strong> ' + Math.round(item.confidence * 100) + '%</p>';
+                                    if (item.category) html += '<p><strong>Category:</strong> ' + item.category + '</p>';
+                                    html += '</div>'; // evidence-meta
+
+                                    html += '</div>'; // evidence-card
+
+                                    $('#evidenceList').append(html);
+                                });
+                            }
+
+                            $('#resultContainer').fadeIn();
+                        } else {
+                            $('#answerText').text("An error occurred during retrieval.");
+                            $('#resultContainer').fadeIn();
+                        }
+                    },
+                    error: function () {
+                        $('#loadingDiv').hide();
+                        $('#retrieveBtn').prop('disabled', false);
+                        $('#answerText').text("A server error occurred. Please try again.");
+                        $('#resultContainer').fadeIn();
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+
+</html>
