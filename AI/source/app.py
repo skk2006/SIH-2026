@@ -6,6 +6,19 @@ import re
 import logging
 import numpy as np
 import sys
+import config
+import db_pg
+
+import config
+import db_pg
+
+# ── PostgreSQL init (non-fatal) ───────────────────────────────────────────────
+_pg_available = db_pg.init_tables()
+
+# Webcam PG cooldown: track last time we wrote a detection_events row per person
+_pg_webcam_last_insert = {}  
+PG_WEBCAM_COOLDOWN = config.PG_WEBCAM_COOLDOWN
+
 if not hasattr(np, '_core'):
     import numpy.core as _core
     sys.modules['numpy._core'] = _core
@@ -46,8 +59,7 @@ vehicle_queue = Queue()
 
 
 app = Flask(__name__)
-app.secret_key = "your_secret_key"
-
+app.secret_key = config.FLASK_SECRET_KEY
 # Email Configuration
 EMAIL_SENDER = os.environ.get('EMAIL_SENDER', 'your_email@gmail.com')
 EMAIL_PASSWORD = os.environ.get('EMAIL_PASSWORD', 'your_email_password')
@@ -628,11 +640,13 @@ TIME_DATA_FOLDER = os.path.join(BASE_PATH, "time_data")
 EMBEDDINGS_FILE = os.path.join(BASE_PATH, "embeddings.pkl")
 UPLOAD_FOLDER = os.path.join(BASE_PATH, "uploads")
 DATASET_FOLDER = os.path.join(BASE_PATH, "dataset")
+WATCHLIST_IMG_FOLDER = os.path.join(BASE_PATH, "storage", "watchlist")
 
 os.makedirs(DETECTED_FACES_FOLDER, exist_ok=True)
 os.makedirs(TIME_DATA_FOLDER, exist_ok=True)
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(DATASET_FOLDER, exist_ok=True)
+os.makedirs(WATCHLIST_IMG_FOLDER, exist_ok=True)
 
 DETECTED_VEHICLES_FOLDER = os.path.join(BASE_PATH, "detected_vehicles")
 os.makedirs(DETECTED_VEHICLES_FOLDER, exist_ok=True)
@@ -702,7 +716,7 @@ loitering_alerts = []
 vehicle_alerts = []
 last_vehicle_detection_time = {}
 
-def extract_faces_from_video(name, video_path, num_images=500):
+def extract_faces_from_video(name, video_path, num_images=500, category="SUSPECT"):
     if not os.path.exists(video_path):
         return "Error: Video file does not exist."
 
@@ -760,6 +774,30 @@ def extract_faces_from_video(name, video_path, num_images=500):
 
         with open(EMBEDDINGS_FILE, "wb") as f:
             pickle.dump(known_faces, f)
+
+        # ── PostgreSQL: save ONE watchlist row for REDLIST / SUSPECT ──────────
+        if _pg_available and category.upper() in ("REDLIST", "SUSPECT"):
+            # Use the first good embedding as the representative
+            ref_embedding = new_embeddings[0]
+            # Save a reference image (first saved face image)
+            ref_src = os.path.join(output_dir, "face_0.jpg")
+            ref_dst_name = f"{name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d%H%M%S')}.jpg"
+            ref_dst = os.path.join(WATCHLIST_IMG_FOLDER, ref_dst_name)
+            try:
+                import shutil
+                if os.path.exists(ref_src):
+                    shutil.copy2(ref_src, ref_dst)
+                else:
+                    ref_dst = ref_src
+            except Exception as cp_err:
+                print(f"[PG] reference image copy failed: {cp_err}")
+                ref_dst = ref_src
+            db_pg.insert_watchlist(
+                name=name,
+                category=category.upper(),
+                embedding=ref_embedding,
+                reference_image_path=ref_dst,
+            )
 
         return f"Extracted {len(new_embeddings)} face embeddings for {name} and saved in {EMBEDDINGS_FILE}."
     
@@ -1009,6 +1047,33 @@ def generate_frames(camera_source=0):
                     f.write(f"{timestamp}\n")
 
                 alerts.append({"name": name, "time": timestamp})
+
+                # ── PostgreSQL: one detection_events row per cooldown window ─
+                if _pg_available:
+                    last_pg = _pg_webcam_last_insert.get(name, 0)
+                    if current_time - last_pg >= PG_WEBCAM_COOLDOWN:
+                        _pg_webcam_last_insert[name] = current_time
+                        
+                        # Encode face as JPEG bytes → store directly in Postgres
+                        face_bgr = cv2.cvtColor(face, cv2.COLOR_RGB2BGR)
+                        _ok, _enc = cv2.imencode('.jpg', face_bgr)
+                        jpeg_bytes = _enc.tobytes() if _ok else None
+                        
+                        # Distance → confidence (0 = worst, 1 = best)
+                        emb_norm = np.linalg.norm(face_embedding)
+                        conf = 0.0
+                        if emb_norm > 0:
+                            fe_normed = face_embedding / emb_norm
+                            if name in normalized_known_faces and len(normalized_known_faces[name]) > 0:
+                                dists = np.linalg.norm(normalized_known_faces[name] - fe_normed, axis=1)
+                                conf  = float(max(0.0, 1.0 - float(dists.min())))
+                                
+                        import threading as _thr
+                        _thr.Thread(
+                            target=db_pg.insert_detection,
+                            args=(name, "LIVE_WEBCAM", conf, jpeg_bytes),
+                            daemon=True
+                        ).start()
 
                 # Add task to the queue instead of blocking frame processing
                 task_queue.put((name, timestamp, face_path))
@@ -1979,6 +2044,55 @@ def night_detection():
             return redirect(url_for('night_detection'))
 
     return render_template('night_detection.html', results=None)
+
+
+# ── PostgreSQL evidence frame API ─────────────────────────────────────────────
+@app.route('/api/events/<int:event_id>/frame')
+def get_event_frame(event_id):
+    """Return the JPEG evidence frame stored in detection_events.frame_image."""
+    if not _pg_available:
+        return jsonify({'error': 'PostgreSQL not available'}), 503
+    jpeg_bytes = db_pg.get_frame_image(event_id)
+    if jpeg_bytes is None:
+        return jsonify({'error': 'Frame not found'}), 404
+        
+    from flask import make_response
+    response = make_response(jpeg_bytes)
+    response.headers['Content-Type'] = 'image/jpeg'
+    response.headers['Cache-Control'] = 'no-cache'
+    return response
+
+@app.route('/api/events')
+def get_detection_events():
+    """Return recent detection events as JSON."""
+    if not _pg_available:
+        return jsonify([])
+    try:
+        import db_pg as _db
+        conn = _db.get_conn()
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id, person_id, person_name, source, confidence,
+                       detected_at,
+                       octet_length(frame_image) AS image_size
+                FROM detection_events
+                ORDER BY detected_at DESC LIMIT 100
+            """)
+            rows = cur.fetchall()
+        conn.close()
+        
+        events = []
+        for r in rows:
+            events.append({
+                'id': r[0], 'person_id': r[1], 'person_name': r[2],
+                'source': r[3], 'confidence': r[4],
+                'detected_at': r[5].isoformat() if r[5] else None,
+                'image_size': r[6],
+                'frame_url': f'/api/events/{r[0]}/frame'
+            })
+        return jsonify(events)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == "__main__":

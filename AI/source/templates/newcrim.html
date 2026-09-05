@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,8 +9,11 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Montserrat:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
 </head>
+
 <body>
     <header>
         <nav class="glass-nav">
@@ -47,16 +51,27 @@
                     <i class="fas fa-id-card"></i>
                     <h2>New Criminal Record</h2>
                 </div>
-                <p class="instruction-text">Enter the suspect's name and upload a video for AI-based facial recognition analysis.</p>
-                
+                <p class="instruction-text">Enter the suspect's name and upload a video for AI-based facial recognition
+                    analysis.</p>
+
                 <form id="upload-form" action="/new-crim" method="post" enctype="multipart/form-data">
                     <div class="input-box">
                         <label for="suspect-name"><i class="fas fa-user"></i> Suspect's Name</label>
                         <input type="text" name="name" id="suspect-name" placeholder="Enter full name" required>
                     </div>
-                    
+
+                    <div class="input-box">
+                        <label for="category"><i class="fas fa-tag"></i> Category</label>
+                        <select name="category" id="category"
+                            style="width:100%;padding:12px 16px;background:#1a1a2e;color:#e0e0e0;border:1px solid rgba(255,255,255,0.15);border-radius:8px;font-size:1rem;outline:none;">
+                            <option value="REDLIST" selected>REDLIST</option>
+                            <option value="SUSPECT">SUSPECT</option>
+                            <option value="GENERAL">GENERAL</option>
+                        </select>
+                    </div>
+
                     <div class="upload-box">
-                        <label for="video-upload"><i class="fas fa-video"></i> Upload Video</label>
+                        <label for="video-upload"><i class="fas fa-video"></i> Upload Video / Image</label>
                         <div class="file-input-wrapper">
                             <input type="file" name="video" id="video-upload" accept="video/*" required>
                             <div class="file-upload-btn">
@@ -64,26 +79,40 @@
                             </div>
                             <span id="file-name">No file chosen</span>
                         </div>
+                        <button type="button" id="deleteVideoBtn"
+                            style="margin-top:10px; display:none; padding:6px 12px; background:rgba(239,68,68,0.1); color:#ef4444; border:1px solid rgba(239,68,68,0.3); border-radius:6px; cursor:pointer;"><i
+                                class="fas fa-trash"></i> Delete Video</button>
                     </div>
-                    
+
                     <div id="file-preview"></div>
-                    
+
                     <button type="submit" class="submit-btn"><i class="fas fa-search"></i> Analyze Faces</button>
                 </form>
-                
+
+                <div id="loading-overlay"
+                    style="display:none; flex-direction:column; align-items:center; margin-top:20px; padding:20px; background:rgba(255,255,255,0.05); border-radius:8px;">
+                    <h3 style="color:#00f2fe; margin-bottom:10px;"><i class="fas fa-spinner fa-spin"></i> Processing
+                        Video...</h3>
+                    <p style="color:#aaa; text-align:center; font-size:0.9rem; margin-bottom:15px;">Extracting face
+                        embeddings... please wait.</p>
+                    <button type="button" id="cancelProcessBtn"
+                        style="background:rgba(239,68,68,0.1); color:#ef4444; border:1px solid rgba(239,68,68,0.3); padding:8px 16px; border-radius:6px; cursor:pointer;"><i
+                            class="fas fa-times"></i> Cancel Processing</button>
+                </div>
+
                 <div class="messages">
                     {% with messages = get_flashed_messages() %}
-                        {% if messages %}
-                            {% for message in messages %}
-                                <p>{{ message }}</p>
-                            {% endfor %}
-                        {% endif %}
+                    {% if messages %}
+                    {% for message in messages %}
+                    <p>{{ message }}</p>
+                    {% endfor %}
+                    {% endif %}
                     {% endwith %}
                 </div>
             </div>
         </section>
     </main>
-    
+
     <footer>
         <div class="footer-content">
             <div class="footer-logo">
@@ -98,7 +127,7 @@
                     <li><a href="new-crim">Insert Data</a></li>
                     <li><a href="suspects">Database</a></li>
                     <li><a href="vehicles">Vehicles</a></li>
-                <li><a href="analyze-video">Analyze Video</a></li>
+                    <li><a href="analyze-video">Analyze Video</a></li>
                     <li><a href="contact">Contact</a></li>
                 </ul>
             </div>
@@ -111,7 +140,8 @@
             <div class="footer-social">
                 <h3>Connect With Us</h3>
                 <div class="social-icons">
-                    <a href="https://www.instagram.com/tech_trailblazers05?igsh=Z3Y3d2hjeDAycXg="><i class="fab fa-instagram"></i></a>
+                    <a href="https://www.instagram.com/tech_trailblazers05?igsh=Z3Y3d2hjeDAycXg="><i
+                            class="fab fa-instagram"></i></a>
                 </div>
             </div>
         </div>
@@ -122,26 +152,29 @@
 
     <script>
         // Mobile menu toggle
-        document.querySelector('.hamburger').addEventListener('click', function() {
+        document.querySelector('.hamburger').addEventListener('click', function () {
             document.querySelector('.nav-links').classList.toggle('active');
             this.classList.toggle('active');
         });
 
         // File upload preview
-        document.getElementById("video-upload").addEventListener("change", function(event) {
+        document.getElementById("video-upload").addEventListener("change", function (event) {
             let filePreview = document.getElementById("file-preview");
             let fileName = document.getElementById("file-name");
+            let deleteBtn = document.getElementById("deleteVideoBtn");
             filePreview.innerHTML = ""; // Clear previous preview
-            
+
             if (event.target.files.length === 0) {
                 filePreview.innerHTML = "<p>No video selected.</p>";
                 fileName.textContent = "No file chosen";
+                deleteBtn.style.display = 'none';
                 return;
             }
-            
+
+            deleteBtn.style.display = 'inline-block';
             let file = event.target.files[0];
             fileName.textContent = file.name;
-            
+
             if (file.type.startsWith("video/")) {
                 let videoPreview = document.createElement("video");
                 videoPreview.src = URL.createObjectURL(file);
@@ -153,14 +186,38 @@
             }
         });
 
+        document.getElementById("deleteVideoBtn").addEventListener("click", function () {
+            document.getElementById("video-upload").value = "";
+            document.getElementById("file-name").textContent = "No file chosen";
+            document.getElementById("file-preview").innerHTML = "";
+            this.style.display = 'none';
+        });
+
+        let currentJobId = null;
+
+        document.getElementById("cancelProcessBtn").addEventListener("click", function () {
+            if (currentJobId) {
+                fetch('/api/cancel/' + encodeURIComponent(currentJobId), { method: 'POST' });
+                alert('Cancellation requested. The page will reload shortly.');
+            }
+        });
+
         // Form validation
-        document.getElementById("upload-form").addEventListener("submit", function(event) {
+        document.getElementById("upload-form").addEventListener("submit", function (event) {
             let suspectName = document.getElementById("suspect-name").value.trim();
             if (!suspectName) {
                 alert("Please enter the suspect's name.");
                 event.preventDefault();
+                return;
+            }
+            document.getElementById('upload-form').style.display = 'none';
+            document.getElementById('loading-overlay').style.display = 'flex';
+            const file = document.getElementById("video-upload").files[0];
+            if (file) {
+                currentJobId = "newcrim_" + file.name;
             }
         });
     </script>
 </body>
+
 </html>
