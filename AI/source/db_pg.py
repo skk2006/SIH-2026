@@ -22,6 +22,8 @@ def init_tables():
         reference_image_path TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    
+    ALTER TABLE watchlist_people ADD COLUMN IF NOT EXISTS reference_image BYTEA;
 
     CREATE TABLE IF NOT EXISTS detection_events (
         id SERIAL PRIMARY KEY,
@@ -47,7 +49,7 @@ def init_tables():
         return False
 
 
-def insert_watchlist(name, category, embedding, reference_image_path=None):
+def insert_watchlist(name, category, embedding, reference_image_path=None, reference_image=None):
     try:
         emb_bytes = pickle.dumps(embedding) if embedding is not None else None
 
@@ -57,8 +59,8 @@ def insert_watchlist(name, category, embedding, reference_image_path=None):
                 cur.execute(
                     """
                     INSERT INTO watchlist_people
-                    (name, category, face_embedding, reference_image_path, created_at)
-                    VALUES (%s, %s, %s, %s, %s)
+                    (name, category, face_embedding, reference_image_path, reference_image, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -66,6 +68,7 @@ def insert_watchlist(name, category, embedding, reference_image_path=None):
                         category,
                         psycopg2.Binary(emb_bytes) if emb_bytes else None,
                         reference_image_path,
+                        psycopg2.Binary(reference_image) if reference_image else None,
                         datetime.now(timezone.utc)
                     )
                 )
@@ -104,6 +107,30 @@ def get_watchlist_id(name):
         print(f"[PG] get_watchlist_id failed: {e}")
         return None
 
+
+def get_watchlist_image(person_id):
+    try:
+        conn = get_conn()
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT reference_image, reference_image_path
+                FROM watchlist_people
+                WHERE id=%s
+                """,
+                (person_id,)
+            )
+            row = cur.fetchone()
+        conn.close()
+        if row:
+            if row[0]: # reference_image BYTEA
+                return bytes(row[0]), None 
+            else: # fallback to reference_image_path
+                return None, row[1]
+        return None, None
+    except Exception as e:
+        print(f"[PG] get_watchlist_image failed: {e}")
+        return None, None
 
 def insert_detection(
     person_name,

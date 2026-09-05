@@ -783,20 +783,23 @@ def extract_faces_from_video(name, video_path, num_images=500, category="SUSPECT
             ref_src = os.path.join(output_dir, "face_0.jpg")
             ref_dst_name = f"{name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d%H%M%S')}.jpg"
             ref_dst = os.path.join(WATCHLIST_IMG_FOLDER, ref_dst_name)
+            ref_image_bytes = None
             try:
-                import shutil
                 if os.path.exists(ref_src):
-                    shutil.copy2(ref_src, ref_dst)
-                else:
-                    ref_dst = ref_src
-            except Exception as cp_err:
-                print(f"[PG] reference image copy failed: {cp_err}")
-                ref_dst = ref_src
+                    _ref_img = cv2.imread(ref_src)
+                    if _ref_img is not None:
+                        _ok, _enc = cv2.imencode('.jpg', _ref_img)
+                        if _ok:
+                            ref_image_bytes = _enc.tobytes()
+            except Exception as e:
+                print(f"[PG] ref_image encoding failed: {e}")
+
             db_pg.insert_watchlist(
                 name=name,
                 category=category.upper(),
                 embedding=ref_embedding,
                 reference_image_path=ref_dst,
+                reference_image=ref_image_bytes
             )
 
         return f"Extracted {len(new_embeddings)} face embeddings for {name} and saved in {EMBEDDINGS_FILE}."
@@ -1054,10 +1057,12 @@ def generate_frames(camera_source=0):
                     if current_time - last_pg >= PG_WEBCAM_COOLDOWN:
                         _pg_webcam_last_insert[name] = current_time
                         
-                        # Encode face as JPEG bytes → store directly in Postgres
-                        face_bgr = cv2.cvtColor(face, cv2.COLOR_RGB2BGR)
-                        _ok, _enc = cv2.imencode('.jpg', face_bgr)
+                        # Use full frame for evidence, as requested.
+                        # Using Strategy B: Current code saves on first match. We save this trigger frame as the full evidence frame.
+                        full_ev_frame = frame.copy()
+                        _ok, _enc = cv2.imencode('.jpg', full_ev_frame)
                         jpeg_bytes = _enc.tobytes() if _ok else None
+
                         
                         # Distance → confidence (0 = worst, 1 = best)
                         emb_norm = np.linalg.norm(face_embedding)
@@ -1694,12 +1699,14 @@ def analyze_video_file(video_path):
                                 registered_candidates[best_name] = {
                                     'name': best_name,
                                     'face_bgr': display_face,
+                                    'full_frame': frame.copy(),
                                     'score': quality,
                                     'frame_number': current_frame_idx,
                                     'min_dist': float(min_dist)
                                 }
                             elif quality > registered_candidates[best_name]['score']:
                                 registered_candidates[best_name]['face_bgr'] = display_face
+                                registered_candidates[best_name]['full_frame'] = frame.copy()
                                 registered_candidates[best_name]['score'] = quality
                                 registered_candidates[best_name]['frame_number'] = current_frame_idx
                                 registered_candidates[best_name]['min_dist'] = float(min_dist)
@@ -1919,7 +1926,8 @@ def analyze_video_file(video_path):
 
         if _pg_available:
             conf = float(max(0.0, 1.0 - candidate.get('min_dist', 1.0)))
-            jpeg_bytes = buf.tobytes()
+            _ff_ok, ff_buf = cv2.imencode('.jpg', candidate['full_frame'])
+            jpeg_bytes = ff_buf.tobytes() if _ff_ok else None
             import threading as _thr
             _thr.Thread(
                 target=db_pg.insert_detection,
@@ -2073,6 +2081,55 @@ def get_event_frame(event_id):
     response.headers['Content-Type'] = 'image/jpeg'
     response.headers['Cache-Control'] = 'no-cache'
     return response
+
+@app.route('/api/watchlist/<int:person_id>/image')
+def get_watchlist_image_api(person_id):
+    """Return the reference image stored for a watchlist person."""
+    if not _pg_available:
+        return jsonify({'error': 'PostgreSQL not available'}), 503
+    
+    img_bytes, path = db_pg.get_watchlist_image(person_id)
+    if img_bytes is not None:
+        from flask import make_response
+        response = make_response(img_bytes)
+        response.headers['Content-Type'] = 'image/jpeg'
+        response.headers['Cache-Control'] = 'no-cache'
+        return response
+    elif path and os.path.exists(path):
+        from flask import send_file
+        return send_file(path, mimetype='image/jpeg')
+    return jsonify({'error': 'Image not found'}), 404
+
+def calculate_face_quality(frame, bbox, confidence=0.0):
+    """
+    Lightweight helper to calculate face crop quality.
+    Currently, the application saves the first trigger frame as evidence. 
+    This function is provided for future multi-frame confirmation integration.
+    """
+    try:
+        x1, y1, width, height = bbox
+        x2, y2 = x1 + width, y1 + height
+        
+        # Ensure within bounds
+        h, w = frame.shape[:2]
+        x1, y1 = max(0, int(x1)), max(0, int(y1))
+        x2, y2 = min(w, int(x2)), min(h, int(y2))
+        
+        face = frame[y1:y2, x1:x2]
+        if face.size == 0:
+            return -1.0
+            
+        fh, fw = face.shape[:2]
+        if fh < 30 or fw < 30:
+            return -1.0
+            
+        gray = cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)
+        sharpness = cv2.Laplacian(gray, cv2.CV_64F).var()
+        brightness = float(gray.mean())
+        
+        return float(sharpness * np.sqrt(fh * fw) * max(0.1, confidence))
+    except Exception:
+        return -1.0
 
 @app.route('/api/events')
 def get_detection_events():
