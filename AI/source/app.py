@@ -1695,12 +1695,14 @@ def analyze_video_file(video_path):
                                     'name': best_name,
                                     'face_bgr': display_face,
                                     'score': quality,
-                                    'frame_number': current_frame_idx
+                                    'frame_number': current_frame_idx,
+                                    'min_dist': float(min_dist)
                                 }
                             elif quality > registered_candidates[best_name]['score']:
                                 registered_candidates[best_name]['face_bgr'] = display_face
                                 registered_candidates[best_name]['score'] = quality
                                 registered_candidates[best_name]['frame_number'] = current_frame_idx
+                                registered_candidates[best_name]['min_dist'] = float(min_dist)
                         else:
                             # Unknown face: Track spatially across consecutive frames and by FaceNet embedding
                             fx, fy, fw, fh = bbox
@@ -1914,6 +1916,16 @@ def analyze_video_file(video_path):
             'image_b64': img_b64,
             'frame_number': candidate['frame_number']
         })
+
+        if _pg_available:
+            conf = float(max(0.0, 1.0 - candidate.get('min_dist', 1.0)))
+            jpeg_bytes = buf.tobytes()
+            import threading as _thr
+            _thr.Thread(
+                target=db_pg.insert_detection,
+                args=(candidate['name'], "VIDEO_UPLOAD", conf, jpeg_bytes),
+                daemon=True
+            ).start()
 
     # Merge any unknown face tracks that have close embeddings (< 0.76)
     merged_unknown_tracks = []

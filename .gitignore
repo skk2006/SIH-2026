@@ -23,3 +23,6 @@ AI/source/detected_vehicles/
 AI/source/time_data/
 AI/source/uploads/
 AI/source/night detection v-1.pt/
+AI/source/dataset/
+AI/source/embeddings.pkl
+AI/source/storage/watchlist/
