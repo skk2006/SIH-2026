@@ -62,24 +62,24 @@
                         <div id="single-cam-options" style="display: flex; align-items: center; gap: 8px;">
                             <label for="camera-source" style="color: #00d2ff; font-weight: bold;">Camera:</label>
                             <select id="camera-source" style="padding: 8px 12px; border-radius: 5px; background: rgba(0, 0, 0, 0.7); color: #fff; border: 1px solid #00d2ff;">
-                                <option value="0">Laptop Camera (0)</option>
-                                <option value="1">External Webcam (1)</option>
-                                <option value="2">External Webcam (2)</option>
+                                <option value="0">Camera 0 (Laptop Camera)</option>
+                                <option value="1">Camera 1 (External Webcam)</option>
+                                <option value="2">Camera 2 (External Webcam)</option>
                             </select>
                         </div>
 
                         <div id="dual-cam-options" style="display: none; align-items: center; gap: 8px;">
-                            <label style="color: #00d2ff; font-weight: bold;">Cam A:</label>
+                            <label style="color: #00d2ff; font-weight: bold;">Cam 0:</label>
                             <select id="cam-a" style="padding: 8px; border-radius: 5px; background: rgba(0,0,0,0.7); color: #fff; border: 1px solid #00d2ff;">
-                                <option value="0" selected>Laptop (0)</option>
-                                <option value="1">Webcam (1)</option>
-                                <option value="2">Webcam (2)</option>
+                                <option value="0" selected>Camera 0 (Laptop)</option>
+                                <option value="1">Camera 1 (Webcam)</option>
+                                <option value="2">Camera 2 (Webcam)</option>
                             </select>
-                            <label style="color: #00d2ff; font-weight: bold;">Cam B:</label>
+                            <label style="color: #00d2ff; font-weight: bold;">Cam 1:</label>
                             <select id="cam-b" style="padding: 8px; border-radius: 5px; background: rgba(0,0,0,0.7); color: #fff; border: 1px solid #00d2ff;">
-                                <option value="0">Laptop (0)</option>
-                                <option value="1" selected>Webcam (1)</option>
-                                <option value="2">Webcam (2)</option>
+                                <option value="0">Camera 0 (Laptop)</option>
+                                <option value="1" selected>Camera 1 (Webcam)</option>
+                                <option value="2">Camera 2 (Webcam)</option>
                             </select>
                         </div>
 
@@ -186,6 +186,8 @@
                     <li><a href="/live-mon">Live Monitoring</a></li>
                     <li><a href="/new-crim">Insert Data</a></li>
                     <li><a href="/suspects">Database</a></li>
+                    <li><a href="/vehicles">Vehicles</a></li>
+                    <li><a href="/analyze-video">Analyze Video</a></li>
                     <li><a href="/contact">Contact</a></li>
                 </ul>
             </div>
@@ -238,7 +240,8 @@
                 .then(data => {
                     if (data.length > 0 && !alertCooldown) {
                         let latestAlert = data[data.length - 1];
-                        showAlert(`ALERT! Suspect: ${latestAlert.name} Detected`, latestAlert.time, '#dc3545');
+                        const camInfo = latestAlert.camera_id ? ` on ${latestAlert.camera_id}` : '';
+                        showAlert(`ALERT! Suspect: ${latestAlert.name} Detected${camInfo}`, latestAlert.time, '#dc3545');
                     }
                 });
                 
@@ -311,59 +314,90 @@
         }
         setInterval(fetchHeadcount, 1000);
 
-        // ── Mode switching logic ──
+        // ── Camera switching and mode management ──
         const modeSelect = document.getElementById("camera-mode");
         const singleOpts = document.getElementById("single-cam-options");
         const dualOpts = document.getElementById("dual-cam-options");
         const modeLabel = document.getElementById("mode-label");
 
-        modeSelect.addEventListener("change", function() {
-            if (this.value === "cctv") {
-                singleOpts.style.display = "none";
-                dualOpts.style.display = "flex";
-                modeLabel.textContent = "CCTV Dual Camera Mode (Cross-Camera ReID)";
-            } else {
-                singleOpts.style.display = "flex";
-                dualOpts.style.display = "none";
-                modeLabel.textContent = "Single Camera Mode";
-            }
-        });
+        let _switching = false;  // debounce guard
+        async function applyCurrentCamera() {
+            if (_switching) return;
+            _switching = true;
+            const feed = document.getElementById("videoFeed");
+            feed.src = "";
+            document.getElementById("status-indicator").classList.remove("online");
+            document.querySelector(".status-text").textContent = "Connecting Feed...";
+            const applyBtn = document.getElementById("apply-camera");
+            if (applyBtn) applyBtn.disabled = true;
 
-        // ── Apply camera button ──
-        document.getElementById("apply-camera").addEventListener("click", function() {
+            // Signal old stream to exit (fast — pool keeps hardware alive)
+            try { await fetch('/stop_feed'); } catch(e) {}
+            // Minimal wait: camera pool reuses hardware so no cold-start delay
+            await new Promise(r => setTimeout(r, 50));
+
             const mode = document.getElementById("camera-mode").value;
             let feedUrl;
             if (mode === "cctv") {
                 const camA = document.getElementById("cam-a").value;
                 const camB = document.getElementById("cam-b").value;
-                feedUrl = "/video_feed?mode=dual&src=" + camA + "&cam_b=" + camB;
-                modeLabel.textContent = "CCTV Dual Camera Mode (Cross-Camera ReID)";
+                feedUrl = "/video_feed?mode=dual&src=" + camA + "&cam_b=" + camB + "&_t=" + Date.now();
+                modeLabel.textContent = "CCTV Dual Camera Mode (Laptop: Cam " + camA + " | External: Cam " + camB + ")";
             } else {
                 const src = document.getElementById("camera-source").value;
-                feedUrl = "/video_feed?src=" + src;
-                modeLabel.textContent = "Single Camera Mode";
+                feedUrl = "/video_feed?src=" + src + "&_t=" + Date.now();
+                modeLabel.textContent = "Single Camera Mode (Camera " + src + ")";
             }
-            document.getElementById("videoFeed").src = feedUrl;
+
+            feed.onload = function() {
+                document.getElementById("status-indicator").classList.add("online");
+                document.querySelector(".status-text").textContent = "Camera Online";
+                if (applyBtn) applyBtn.disabled = false;
+                _switching = false;
+            };
+            feed.onerror = function() {
+                document.querySelector(".status-text").textContent = "Reconnecting...";
+                if (applyBtn) applyBtn.disabled = false;
+                _switching = false;
+            };
+
+            feed.src = feedUrl;
             document.getElementById("status-indicator").classList.add("online");
             document.querySelector(".status-text").textContent = "Camera Online";
             document.getElementById("start-camera").disabled = true;
             document.getElementById("pause-camera").disabled = false;
+            // Safety: release debounce guard after 2s even if onload/onerror doesn't fire
+            setTimeout(() => { _switching = false; }, 2000);
+        }
+
+        modeSelect.addEventListener("change", function() {
+            if (this.value === "cctv") {
+                singleOpts.style.display = "none";
+                dualOpts.style.display = "flex";
+            } else {
+                singleOpts.style.display = "flex";
+                dualOpts.style.display = "none";
+            }
+            applyCurrentCamera();
         });
 
-        // Camera controls functionality
+        document.getElementById("camera-source").addEventListener("change", applyCurrentCamera);
+        document.getElementById("cam-a").addEventListener("change", applyCurrentCamera);
+        document.getElementById("cam-b").addEventListener("change", applyCurrentCamera);
+        document.getElementById("apply-camera").addEventListener("click", applyCurrentCamera);
+
         document.getElementById("start-camera").addEventListener("click", function() {
-            document.getElementById("status-indicator").classList.add("online");
-            document.querySelector(".status-text").textContent = "Camera Online";
-            document.getElementById("start-camera").disabled = true;
-            document.getElementById("pause-camera").disabled = false;
+            applyCurrentCamera();
         });
 
-        document.getElementById("pause-camera").addEventListener("click", function() {
+        document.getElementById("pause-camera").addEventListener("click", async function() {
             document.getElementById("videoFeed").src = "";
             document.getElementById("status-indicator").classList.remove("online");
             document.querySelector(".status-text").textContent = "Camera Offline";
             document.getElementById("start-camera").disabled = false;
             document.getElementById("pause-camera").disabled = true;
+            // Physically release all cameras when user clicks Pause
+            try { await fetch('/stop_feed'); } catch(e) {}
         });
 
         // Mobile menu toggle

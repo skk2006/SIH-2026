@@ -1,6 +1,6 @@
 # Environments
 .env
-.venv
+.venv/
 env/
 venv/
 ENV/
@@ -22,4 +22,6 @@ AI/source/detected_faces/
 AI/source/detected_vehicles/
 AI/source/time_data/
 AI/source/uploads/
-AI/source/night detection v-1.pt/
+
+# Logs
+*.log

@@ -26,14 +26,14 @@
                 SENTINEL-AI
             </div>
             <ul class="nav-links">
-                <li><a href="landing">Home</a></li>
-                <li><a href="live-mon">Live Monitoring</a></li>
-                <li><a href="new-crim">Insert-video</a></li>
-                <li><a href="Database" class="active">Suspects</a></li>
-                <li><a href="vehicles">Vehicles</a></li>
-                <li><a href="analyze-video">Analyze Video</a></li>
+                <li><a href="/landing">Home</a></li>
+                <li><a href="/live-mon">Live Monitoring</a></li>
+                <li><a href="/new-crim">Insert Data</a></li>
+                <li><a href="/suspects" class="active">Database</a></li>
+                <li><a href="/vehicles">Vehicles</a></li>
+                <li><a href="/analyze-video">Analyze Video</a></li>
                 <li><a href="/night-detection"><i class="fas fa-moon"></i> Night Detection</a></li>
-                <li><a href="contact">Contact</a></li>
+                <li><a href="/contact">Contact</a></li>
             </ul>
             <div class="hamburger">
                 <span class="bar"></span>
@@ -90,14 +90,21 @@
                     <thead>
                         <tr>
                             <th>Suspect Name</th>
+                            <th>Camera ID</th>
                             <th>Detection Time</th>
                             <th>Image</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for suspect in suspects %}
-                        <tr data-name="{{ suspect.suspect_name|lower }}" data-time="{{ suspect.time }}">
-                            <td>{{ suspect.suspect_name }}</td>
+                        <tr data-name="{{ (suspect.suspect_name or '')|lower }}" data-time="{{ suspect.time or '' }}" data-camera="{{ (suspect.camera_id or '')|lower }}">
+                            <td style="font-weight: 600; font-size: 1.05rem;">{{ suspect.suspect_name or 'Unknown Suspect' }}</td>
+                            <td>
+                                <span style="display: inline-flex; align-items: center; gap: 6px; background: rgba(0, 210, 255, 0.1); color: #00d2ff; padding: 4px 10px; border-radius: 20px; font-weight: 600; font-size: 0.85rem; border: 1px solid rgba(0, 210, 255, 0.25);">
+                                    <i class="fas fa-video" style="font-size: 0.75rem;"></i>
+                                    {{ suspect.camera_id or 'N/A' }}
+                                </span>
+                            </td>
                             <td>{{ suspect.time }}</td>
                             <td>
                                 {% if suspect.image_b64 %}
@@ -106,6 +113,13 @@
                                 {% else %}
                                 <span>No image available</span>
                                 {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" class="text-center py-5" style="color: #64748b;">
+                                <i class="fas fa-users-slash fa-3x mb-3 d-block" style="color: #94a3b8;"></i>
+                                <span style="font-size: 1.1rem; font-weight: 500;">No suspect records found in database.</span>
                             </td>
                         </tr>
                         {% endfor %}
@@ -132,11 +146,13 @@
             <div class="footer-links">
                 <h3>Quick Links</h3>
                 <ul>
-                    <li><a href="landing">Home</a></li>
-                    <li><a href="live-mon">Live Monitoring</a></li>
-                    <li><a href="new-crim">Insert Video</a></li>
-                    <li><a href="suspects">Suspects</a></li>
-                    <li><a href="contact">Contact Us</a></li>
+                    <li><a href="/landing">Home</a></li>
+                    <li><a href="/live-mon">Live Monitoring</a></li>
+                    <li><a href="/new-crim">Insert Data</a></li>
+                    <li><a href="/suspects">Database</a></li>
+                    <li><a href="/vehicles">Vehicles</a></li>
+                    <li><a href="/analyze-video">Analyze Video</a></li>
+                    <li><a href="/contact">Contact Us</a></li>
                 </ul>
             </div>
             <div class="footer-contact">
@@ -188,7 +204,7 @@
             });
 
             // Search functionality
-            $("#searchInput").on("keyup", function () {
+            $("#searchInput").on("keyup input", function () {
                 filterTable();
             });
 
@@ -197,44 +213,77 @@
                 filterTable();
             });
 
-            // Clear filters
+            // Clear suspects database and reset table
             $("#clearFilters").click(function () {
-                $("#searchInput").val('');
-                $("#startDate").val('');
-                $("#endDate").val('');
-                $("#suspectsTable tbody tr").show();
+                if (!confirm("Are you sure you want to clear all detected suspect records from the database?")) {
+                    return;
+                }
+                const btn = $(this);
+                const originalHtml = btn.html();
+                btn.prop("disabled", true).html('<i class="fas fa-spinner fa-spin"></i> Clearing...');
+
+                fetch('/clear_suspects', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        btn.prop("disabled", false).html(originalHtml);
+                        $("#searchInput").val('');
+                        $("#startDate").val('');
+                        $("#endDate").val('');
+                        $("#suspectsTable tbody").html(`
+                            <tr>
+                                <td colspan="4" class="text-center py-5" style="color: #64748b;">
+                                    <i class="fas fa-users-slash fa-3x mb-3 d-block" style="color: #94a3b8;"></i>
+                                    <span style="font-size: 1.1rem; font-weight: 500;">No suspect records found in database.</span>
+                                </td>
+                            </tr>
+                        `);
+                    })
+                    .catch(err => {
+                        console.error("Error clearing suspects:", err);
+                        btn.prop("disabled", false).html(originalHtml);
+                        alert("Failed to clear suspects: " + err);
+                    });
             });
 
             // Function to filter table based on search and date inputs
             function filterTable() {
-                const searchValue = $("#searchInput").val().toLowerCase();
-                const startDate = $("#startDate").val();
-                const endDate = $("#endDate").val();
+                const searchValue = ($("#searchInput").val() || '').trim().toLowerCase();
+                const startDate = ($("#startDate").val() || '').trim();
+                const endDate = ($("#endDate").val() || '').trim();
 
                 $("#suspectsTable tbody tr").each(function () {
-                    const name = $(this).data("name");
-                    const time = $(this).data("time");
+                    const name = String($(this).attr("data-name") || "").toLowerCase();
+                    const time = String($(this).attr("data-time") || "").trim();
 
                     // Parse the date string (assuming format: DD-MM-YYYY HH-MM-SS)
                     let datePass = true;
-                    if (startDate || endDate) {
-                        const dateParts = time.split(" ")[0].split("-");
-                        const rowDate = new Date(dateParts[2], dateParts[1] - 1, dateParts[0]);
+                    if ((startDate || endDate) && time) {
+                        try {
+                            const timeParts = time.split(" ");
+                            if (timeParts.length > 0 && timeParts[0].includes("-")) {
+                                const dateParts = timeParts[0].split("-");
+                                if (dateParts.length === 3) {
+                                    const rowDate = new Date(parseInt(dateParts[2]), parseInt(dateParts[1]) - 1, parseInt(dateParts[0]));
 
-                        if (startDate) {
-                            const startParts = startDate.split("-");
-                            const start = new Date(startParts[2], startParts[1] - 1, startParts[0]);
-                            if (rowDate < start) datePass = false;
-                        }
+                                    if (startDate) {
+                                        const startParts = startDate.split("-");
+                                        const start = new Date(parseInt(startParts[2]), parseInt(startParts[1]) - 1, parseInt(startParts[0]));
+                                        if (rowDate < start) datePass = false;
+                                    }
 
-                        if (endDate) {
-                            const endParts = endDate.split("-");
-                            const end = new Date(endParts[2], endParts[1] - 1, endParts[0]);
-                            if (rowDate > end) datePass = false;
+                                    if (endDate) {
+                                        const endParts = endDate.split("-");
+                                        const end = new Date(parseInt(endParts[2]), parseInt(endParts[1]) - 1, parseInt(endParts[0]));
+                                        if (rowDate > end) datePass = false;
+                                    }
+                                }
+                            }
+                        } catch(err) {
+                            console.warn("Date filter error:", err);
                         }
                     }
 
-                    const namePass = name.includes(searchValue);
+                    const namePass = !searchValue || name.includes(searchValue) || String($(this).attr("data-camera") || "").toLowerCase().includes(searchValue);
 
                     if (namePass && datePass) {
                         $(this).show();
@@ -272,17 +321,18 @@
                 // Create table data
                 const tableData = [];
                 $("#suspectsTable tbody tr:visible").each(function () {
-                    const name = $(this).find("td:nth-child(1)").text();
-                    const time = $(this).find("td:nth-child(2)").text();
+                    const name = $(this).find("td:nth-child(1)").text().trim();
+                    const camera = $(this).find("td:nth-child(2)").text().trim();
+                    const time = $(this).find("td:nth-child(3)").text().trim();
 
                     // We can't include images in this simple PDF
-                    tableData.push([name, time]);
+                    tableData.push([name, camera, time]);
                 });
 
                 // Add table to PDF
                 doc.autoTable({
                     startY: 45,
-                    head: [['Suspect Name', 'Detection Time']],
+                    head: [['Suspect Name', 'Camera ID', 'Detection Time']],
                     body: tableData,
                     theme: 'grid',
                     headStyles: { fillColor: [26, 35, 126] }

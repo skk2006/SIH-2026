@@ -26,14 +26,14 @@
                 SENTINEL-AI
             </div>
             <ul class="nav-links">
-                <li><a href="landing">Home</a></li>
-                <li><a href="live-mon">Live Monitoring</a></li>
-                <li><a href="new-crim">Insert-video</a></li>
-                <li><a href="suspects">Suspects</a></li>
-                <li><a href="vehicles" class="active">Vehicles</a></li>
-                <li><a href="analyze-video">Analyze Video</a></li>
+                <li><a href="/landing">Home</a></li>
+                <li><a href="/live-mon">Live Monitoring</a></li>
+                <li><a href="/new-crim">Insert Data</a></li>
+                <li><a href="/suspects">Database</a></li>
+                <li><a href="/vehicles" class="active">Vehicles</a></li>
+                <li><a href="/analyze-video">Analyze Video</a></li>
                 <li><a href="/night-detection"><i class="fas fa-moon"></i> Night Detection</a></li>
-                <li><a href="contact">Contact</a></li>
+                <li><a href="/contact">Contact</a></li>
             </ul>
             <div class="hamburger">
                 <span class="bar"></span>
@@ -96,8 +96,8 @@
                     </thead>
                     <tbody>
                         {% for vehicle in vehicles %}
-                        <tr data-plate="{{ vehicle.number_plate|lower }}" data-time="{{ vehicle.time }}">
-                            <td style="font-size: 1.2rem; font-weight: bold; letter-spacing: 2px;">{{ vehicle.number_plate }}</td>
+                        <tr data-plate="{{ (vehicle.number_plate or '')|lower }}" data-time="{{ vehicle.time or '' }}">
+                            <td style="font-size: 1.2rem; font-weight: bold; letter-spacing: 2px;">{{ vehicle.number_plate or 'UNKNOWN' }}</td>
                             <td>{{ vehicle.time }}</td>
                             <td>
                                 {% if vehicle.image_b64 %}
@@ -106,6 +106,13 @@
                                 {% else %}
                                 <span>No image available</span>
                                 {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="3" class="text-center py-5" style="color: #64748b;">
+                                <i class="fas fa-car fa-3x mb-3 d-block" style="color: #94a3b8;"></i>
+                                <span style="font-size: 1.1rem; font-weight: 500;">No vehicle records found in database.</span>
                             </td>
                         </tr>
                         {% endfor %}
@@ -132,13 +139,13 @@
             <div class="footer-links">
                 <h3>Quick Links</h3>
                 <ul>
-                    <li><a href="landing">Home</a></li>
-                    <li><a href="live-mon">Live Monitoring</a></li>
-                    <li><a href="new-crim">Insert Video</a></li>
-                    <li><a href="suspects">Suspects</a></li>
-                    <li><a href="vehicles">Vehicles</a></li>
-                <li><a href="analyze-video">Analyze Video</a></li>
-                    <li><a href="contact">Contact Us</a></li>
+                    <li><a href="/landing">Home</a></li>
+                    <li><a href="/live-mon">Live Monitoring</a></li>
+                    <li><a href="/new-crim">Insert Data</a></li>
+                    <li><a href="/suspects">Database</a></li>
+                    <li><a href="/vehicles">Vehicles</a></li>
+                    <li><a href="/analyze-video">Analyze Video</a></li>
+                    <li><a href="/contact">Contact Us</a></li>
                 </ul>
             </div>
             <div class="footer-contact">
@@ -190,7 +197,7 @@
             });
 
             // Search functionality
-            $("#searchInput").on("keyup", function () {
+            $("#searchInput").on("keyup input", function () {
                 filterTable();
             });
 
@@ -199,44 +206,77 @@
                 filterTable();
             });
 
-            // Clear filters
+            // Clear vehicles database and reset table
             $("#clearFilters").click(function () {
-                $("#searchInput").val('');
-                $("#startDate").val('');
-                $("#endDate").val('');
-                $("#vehiclesTable tbody tr").show();
+                if (!confirm("Are you sure you want to clear all detected vehicle records from the database?")) {
+                    return;
+                }
+                const btn = $(this);
+                const originalHtml = btn.html();
+                btn.prop("disabled", true).html('<i class="fas fa-spinner fa-spin"></i> Clearing...');
+
+                fetch('/clear_vehicles', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        btn.prop("disabled", false).html(originalHtml);
+                        $("#searchInput").val('');
+                        $("#startDate").val('');
+                        $("#endDate").val('');
+                        $("#vehiclesTable tbody").html(`
+                            <tr>
+                                <td colspan="4" class="text-center py-5" style="color: #64748b;">
+                                    <i class="fas fa-car fa-3x mb-3 d-block" style="color: #94a3b8;"></i>
+                                    <span style="font-size: 1.1rem; font-weight: 500;">No vehicle records found in database.</span>
+                                </td>
+                            </tr>
+                        `);
+                    })
+                    .catch(err => {
+                        console.error("Error clearing vehicles:", err);
+                        btn.prop("disabled", false).html(originalHtml);
+                        alert("Failed to clear vehicles: " + err);
+                    });
             });
 
             // Function to filter table based on search and date inputs
             function filterTable() {
-                const searchValue = $("#searchInput").val().toLowerCase();
-                const startDate = $("#startDate").val();
-                const endDate = $("#endDate").val();
+                const searchValue = ($("#searchInput").val() || '').trim().toLowerCase();
+                const startDate = ($("#startDate").val() || '').trim();
+                const endDate = ($("#endDate").val() || '').trim();
 
                 $("#vehiclesTable tbody tr").each(function () {
-                    const plate = $(this).data("plate") || "";
-                    const time = $(this).data("time");
+                    const plate = String($(this).attr("data-plate") || "").toLowerCase();
+                    const time = String($(this).attr("data-time") || "").trim();
 
                     // Parse the date string (assuming format: DD-MM-YYYY HH-MM-SS)
                     let datePass = true;
-                    if (startDate || endDate) {
-                        const dateParts = time.split(" ")[0].split("-");
-                        const rowDate = new Date(dateParts[2], dateParts[1] - 1, dateParts[0]);
+                    if ((startDate || endDate) && time) {
+                        try {
+                            const timeParts = time.split(" ");
+                            if (timeParts.length > 0 && timeParts[0].includes("-")) {
+                                const dateParts = timeParts[0].split("-");
+                                if (dateParts.length === 3) {
+                                    const rowDate = new Date(parseInt(dateParts[2]), parseInt(dateParts[1]) - 1, parseInt(dateParts[0]));
 
-                        if (startDate) {
-                            const startParts = startDate.split("-");
-                            const start = new Date(startParts[2], startParts[1] - 1, startParts[0]);
-                            if (rowDate < start) datePass = false;
-                        }
+                                    if (startDate) {
+                                        const startParts = startDate.split("-");
+                                        const start = new Date(parseInt(startParts[2]), parseInt(startParts[1]) - 1, parseInt(startParts[0]));
+                                        if (rowDate < start) datePass = false;
+                                    }
 
-                        if (endDate) {
-                            const endParts = endDate.split("-");
-                            const end = new Date(endParts[2], endParts[1] - 1, endParts[0]);
-                            if (rowDate > end) datePass = false;
+                                    if (endDate) {
+                                        const endParts = endDate.split("-");
+                                        const end = new Date(parseInt(endParts[2]), parseInt(endParts[1]) - 1, parseInt(endParts[0]));
+                                        if (rowDate > end) datePass = false;
+                                    }
+                                }
+                            }
+                        } catch(err) {
+                            console.warn("Date filter error:", err);
                         }
                     }
 
-                    const platePass = plate.includes(searchValue);
+                    const platePass = !searchValue || plate.includes(searchValue);
 
                     if (platePass && datePass) {
                         $(this).show();
